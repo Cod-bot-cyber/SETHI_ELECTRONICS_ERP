@@ -172,7 +172,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-10 my-auto"
+              className="relative bg-white dark:bg-[#111827] w-full max-w-lg rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden z-10 my-auto"
               id="customer-modal-content"
             >
               {/* Top Accent bar */}
@@ -181,7 +181,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
               {/* Close Button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-slate-50 p-2 rounded-xl transition-all"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-xl transition-all"
                 id="customer-modal-close-btn"
                 aria-label="Close modal"
               >
@@ -191,10 +191,10 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
               <div className="p-6 sm:p-8">
                 {/* Header */}
                 <div className="mb-6">
-                  <h3 className="text-xl font-bold text-slate-900" id="customer-modal-title">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white" id="customer-modal-title">
                     {customer ? 'Edit Customer Details' : 'Add New Customer'}
                   </h3>
-                  <p className="text-sm text-slate-500 mt-1">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     {customer ? 'Modify the customer details below to update records.' : 'Fill in the information below to register a new customer.'}
                   </p>
                 </div>
@@ -203,12 +203,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                 <form onSubmit={handleSubmit} className="space-y-4" id="customer-form">
                   {/* Customer Name */}
                   <div>
-                    <label htmlFor="customerName" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                    <label htmlFor="customerName" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                       Customer Name <span className="text-red-500">*</span>
                     </label>
                     <div className="relative rounded-xl shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                        <User className="h-5 w-5 text-slate-400" />
+                        <User className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                       </div>
                       <input
                         type="text"
@@ -217,8 +217,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                         value={formData.customerName}
                         onChange={handleChange}
                         placeholder="e.g. Ramesh Kumar"
-                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                          errors.customerName ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                          errors.customerName ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                         }`}
                       />
                     </div>
@@ -229,12 +229,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
                   {/* Phone Number */}
                   <div>
-                    <label htmlFor="phoneNumber" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                    <label htmlFor="phoneNumber" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                       Phone Number <span className="text-red-500">*</span>
                     </label>
                     <div className="relative rounded-xl shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                        <Phone className="h-5 w-5 text-slate-400" />
+                        <Phone className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                       </div>
                       <input
                         type="text"
@@ -243,8 +243,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                         value={formData.phoneNumber}
                         onChange={handleChange}
                         placeholder="e.g. 9876543210 (digits only)"
-                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                          errors.phoneNumber ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                          errors.phoneNumber ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                         }`}
                       />
                     </div>
@@ -255,12 +255,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
                   {/* Address */}
                   <div>
-                    <label htmlFor="address" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                    <label htmlFor="address" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                       Address <span className="text-red-500">*</span>
                     </label>
                     <div className="relative rounded-xl shadow-sm">
                       <div className="absolute top-3 left-3 flex items-start pointer-events-none">
-                        <MapPin className="h-5 w-5 text-slate-400" />
+                        <MapPin className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                       </div>
                       <textarea
                         name="address"
@@ -269,8 +269,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                         value={formData.address}
                         onChange={handleChange}
                         placeholder="e.g. Flat 302, Sector 15, Dwarka, New Delhi"
-                        className={`block w-full pl-10 pr-4 py-2.5 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm resize-none ${
-                          errors.address ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                        className={`block w-full pl-10 pr-4 py-2.5 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm resize-none ${
+                          errors.address ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                         }`}
                       />
                     </div>
@@ -281,12 +281,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
                   {/* Product Purchased */}
                   <div>
-                    <label htmlFor="productPurchased" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                    <label htmlFor="productPurchased" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                       Product Purchased <span className="text-red-500">*</span>
                     </label>
                     <div className="relative rounded-xl shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                        <Laptop className="h-5 w-5 text-slate-400" />
+                        <Laptop className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                       </div>
                       <input
                         type="text"
@@ -295,8 +295,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                         value={formData.productPurchased}
                         onChange={handleChange}
                         placeholder="e.g. LG 32-inch Smart TV"
-                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                          errors.productPurchased ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                        className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                          errors.productPurchased ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                         }`}
                       />
                     </div>
@@ -308,12 +308,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Purchase Price */}
                     <div>
-                      <label htmlFor="purchasePrice" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                      <label htmlFor="purchasePrice" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                         Purchase Price (₹) <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-xl shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <DollarSign className="h-5 w-5 text-slate-400" />
+                          <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                         </div>
                         <input
                           type="text"
@@ -322,8 +322,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                           value={formData.purchasePrice}
                           onChange={handleChange}
                           placeholder="e.g. 24999"
-                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                            errors.purchasePrice ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                            errors.purchasePrice ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                           }`}
                         />
                       </div>
@@ -334,12 +334,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
                     {/* Purchase Date */}
                     <div>
-                      <label htmlFor="purchaseDate" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                      <label htmlFor="purchaseDate" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                         Purchase Date <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-xl shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <Calendar className="h-5 w-5 text-slate-400" />
+                          <Calendar className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                         </div>
                         <input
                           type="date"
@@ -347,8 +347,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                           id="purchaseDate"
                           value={formData.purchaseDate}
                           onChange={handleChange}
-                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                            errors.purchaseDate ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                            errors.purchaseDate ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                           }`}
                         />
                       </div>
@@ -358,53 +358,22 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Warranty Period */}
-                    <div>
-                      <label htmlFor="warrantyMonths" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                        Warranty Period <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative rounded-xl shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <ShieldCheck className="h-5 w-5 text-slate-400" />
-                        </div>
-                        <select
-                          name="warrantyMonths"
-                          id="warrantyMonths"
-                          value={formData.warrantyMonths}
-                          onChange={handleChange}
-                          className="block w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
-                        >
-                          <option value="0">No Warranty (0 mo)</option>
-                          <option value="6">6 Months</option>
-                          <option value="12">1 Year (12 mo)</option>
-                          <option value="24">2 Years (24 mo)</option>
-                          <option value="36">3 Years (36 mo)</option>
-                          <option value="60">5 Years (60 mo)</option>
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-
+                  <div>
                     {/* Payment Status */}
                     <div>
-                      <label htmlFor="paymentStatus" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                      <label htmlFor="paymentStatus" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                         Payment Status <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-xl shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <CreditCard className="h-5 w-5 text-slate-400" />
+                          <CreditCard className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                         </div>
                         <select
                           name="paymentStatus"
                           id="paymentStatus"
                           value={formData.paymentStatus}
                           onChange={handleChange}
-                          className="block w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
+                          className="block w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
                         >
                           <option value="paid">Fully Paid</option>
                           <option value="pending">Due / Pending</option>
@@ -427,12 +396,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
-                      <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                      <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
                         {formData.paymentStatus === 'emi' ? 'Downpayment (DP) Amount (₹)' : 'Amount Paid so far (₹)'} <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-xl shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <DollarSign className="h-5 w-5 text-slate-400" />
+                          <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                         </div>
                         <input
                           type="text"
@@ -441,8 +410,8 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                           value={formData.amountPaid}
                           onChange={handleChange}
                           placeholder={formData.paymentStatus === 'emi' ? 'e.g. 5000 (Downpayment)' : 'e.g. 10000'}
-                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                            errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                            errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
                           }`}
                         />
                       </div>
@@ -453,12 +422,12 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                   )}
 
                   {/* Form Footer Buttons */}
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
                     <button
                       type="button"
                       onClick={onClose}
                       disabled={isSubmitting}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
                       id="customer-modal-cancel-btn"
                     >
                       Cancel
@@ -466,7 +435,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-md shadow-indigo-600/10 transition-all disabled:opacity-50"
+                      className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-md shadow-indigo-600/10 transition-all disabled:opacity-50 cursor-pointer"
                       id="customer-modal-save-btn"
                     >
                       {isSubmitting ? (

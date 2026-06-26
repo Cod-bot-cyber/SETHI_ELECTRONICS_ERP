@@ -6,12 +6,20 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
 /* Custom smooth transition defaults */
 html, body {
   font-family: var(--font-sans);
   background-color: #f8fafc; /* slate-50 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.dark, html.dark body {
+  background-color: #0b0f19; /* dark blue-slate */
+  color: #f1f5f9;
 }
 
 /* Custom styles for beautiful date pickers */
@@ -25,3 +33,25 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
+
+/* Line reflecting loader (YouTube / GitHub style) */
+@keyframes loadingLine {
+  0% {
+    left: -40%;
+    width: 30%;
+  }
+  50% {
+    width: 50%;
+  }
+  100% {
+    left: 100%;
+    width: 30%;
+  }
+}
+
+.animate-loading-line {
+  position: absolute;
+  height: 100%;
+  animation: loadingLine 1.4s infinite ease-in-out;
+}
+

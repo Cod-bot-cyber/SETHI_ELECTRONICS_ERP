@@ -32,7 +32,7 @@ export default function DeleteDialog({ isOpen, customer, onConfirm, onCancel, is
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-100 overflow-hidden"
+            className="relative bg-white dark:bg-[#111827] w-full max-w-md rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden"
             id="delete-modal-content"
           >
             {/* Header / Accent bar */}
@@ -42,7 +42,7 @@ export default function DeleteDialog({ isOpen, customer, onConfirm, onCancel, is
               {/* Close Button */}
               <button
                 onClick={onCancel}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-slate-50 p-2 rounded-xl transition-all"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 dark:hover:bg-slate-800 p-2 rounded-xl transition-all"
                 id="delete-modal-close-btn"
                 aria-label="Cancel delete"
               >
@@ -50,17 +50,17 @@ export default function DeleteDialog({ isOpen, customer, onConfirm, onCancel, is
               </button>
 
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-red-50 rounded-xl shrink-0" id="delete-warning-icon">
-                  <AlertTriangle className="h-6 w-6 text-red-500" />
+                <div className="p-3 bg-red-50 dark:bg-red-950/20 rounded-xl shrink-0" id="delete-warning-icon">
+                  <AlertTriangle className="h-6 w-6 text-red-500 dark:text-red-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900" id="delete-modal-title">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white" id="delete-modal-title">
                     Delete Customer
                   </h3>
-                  <p className="text-sm text-slate-500 mt-2">
-                    Are you sure you want to delete <span className="font-semibold text-slate-800">{customer.customerName}</span>?
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                    Are you sure you want to delete <span className="font-semibold text-slate-800 dark:text-slate-200">{customer.customerName}</span>?
                   </p>
-                  <p className="text-xs text-red-500 mt-1 bg-red-50 p-2 rounded-lg border border-red-100">
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-950/10 p-2 rounded-lg border border-red-100 dark:border-red-900/30">
                     This action is permanent and cannot be undone. All records for this customer will be removed from Firestore.
                   </p>
                 </div>
@@ -72,7 +72,7 @@ export default function DeleteDialog({ isOpen, customer, onConfirm, onCancel, is
                   type="button"
                   onClick={onCancel}
                   disabled={isDeleting}
-                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all disabled:opacity-50"
                   id="delete-modal-cancel-btn"
                 >
                   Cancel

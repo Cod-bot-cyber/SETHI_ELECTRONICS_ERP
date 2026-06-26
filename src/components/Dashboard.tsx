@@ -26,7 +26,10 @@ import {
   Clock,
   AlertCircle,
   Eye,
-  PlusCircle
+  PlusCircle,
+  Sun,
+  Moon,
+  CheckCircle2
 } from 'lucide-react';
 import {
   collection,
@@ -44,7 +47,6 @@ import { db, handleFirestoreError } from '../firebase';
 import { Customer, CustomerInput, OperationType, Purchase } from '../types';
 import CustomerModal from './CustomerModal';
 import DeleteDialog from './DeleteDialog';
-import InvoiceModal from './InvoiceModal';
 
 interface DashboardProps {
   user: {
@@ -75,13 +77,29 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
+  // Theme state: dark or light
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark';
+  });
+
+  // Apply class on load and state change
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
   // Selected customer IDs (multiple selection)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Modal and Dialog states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalCustomer, setModalCustomer] = useState<Customer | null>(null);
-  const [invoiceCustomer, setInvoiceCustomer] = useState<Customer | null>(null);
 
   // Duplicate Check state
   const [duplicateCheckData, setDuplicateCheckData] = useState<{
@@ -350,18 +368,20 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   // Add / Edit submission
   const handleSaveCustomer = async (input: CustomerInput) => {
     try {
-      if (!modalCustomer) {
-        // ADD Mode - check for duplicate customer phone number
-        const existingCustomer = customers.find(
-          c => c.phoneNumber.replace(/\D/g, '') === input.phoneNumber.replace(/\D/g, '')
-        );
-        if (existingCustomer) {
-          setDuplicateCheckData({
-            existingCustomer,
-            newPurchaseInput: input
-          });
-          return;
-        }
+      // Check for duplicate customer phone number (strictly by phone number, ignore name, ignore self if editing)
+      const existingCustomer = customers.find(c => {
+        if (modalCustomer && c.id === modalCustomer.id) return false;
+        const cleanC = c.phoneNumber.replace(/\D/g, '');
+        const cleanInput = input.phoneNumber.replace(/\D/g, '');
+        return cleanC === cleanInput && cleanC.length > 0;
+      });
+
+      if (existingCustomer) {
+        setDuplicateCheckData({
+          existingCustomer,
+          newPurchaseInput: input
+        });
+        return;
       }
 
       const priceVal = Number(input.purchasePrice);
@@ -442,20 +462,6 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     }
   };
 
-  // View specific purchase invoice
-  const handleViewPurchaseInvoice = (customer: Customer, purchase: Purchase) => {
-    const tempCustomer: Customer = {
-      ...customer,
-      productPurchased: purchase.productPurchased,
-      purchasePrice: purchase.purchasePrice,
-      purchaseDate: purchase.purchaseDate,
-      warrantyMonths: purchase.warrantyMonths,
-      paymentStatus: purchase.paymentStatus,
-      amountPaid: purchase.amountPaid,
-    };
-    setInvoiceCustomer(tempCustomer);
-  };
-
   // Trigger Edit modal
   const handleEditClick = (customer: Customer) => {
     setModalCustomer(customer);
@@ -501,6 +507,11 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(rawMsg)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
+
+  const nextUnsentCustomer = useMemo(() => {
+    const selectedCustomers = customers.filter(c => selectedIds.has(c.id));
+    return selectedCustomers.find(c => !sentBroadcastIds.has(c.id));
+  }, [customers, selectedIds, sentBroadcastIds]);
 
   const handleOpenBroadcast = () => {
     setSentBroadcastIds(new Set());
@@ -558,43 +569,64 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800" id="admin-dashboard">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] flex flex-col font-sans text-slate-800 dark:text-slate-100" id="admin-dashboard">
       
+      {/* Top reflecting loading bar */}
+      {loading && (
+        <div className="fixed top-0 left-0 right-0 h-[3.5px] bg-slate-200 dark:bg-slate-800 z-50 overflow-hidden" id="top-reflecting-loading-bar">
+          <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 animate-loading-line" />
+        </div>
+      )}
+
       {/* 1. Header Navigation */}
-      <nav className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40" id="nav-bar">
+      <nav className="bg-white dark:bg-[#111827] border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-40" id="nav-bar">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-600/20 font-sans font-black text-sm tracking-tighter" id="custom-logo">
                 <span className="relative z-10">SE</span>
-                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" title="System Online" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" title="System Online" />
               </div>
               <div>
-                <span className="font-extrabold bg-gradient-to-r from-slate-900 to-indigo-950 bg-clip-text text-transparent text-base sm:text-lg block tracking-tight leading-none">
+                <span className="font-extrabold bg-gradient-to-r from-slate-900 to-indigo-950 dark:from-white dark:to-indigo-200 bg-clip-text text-transparent text-base sm:text-lg block tracking-tight leading-none">
                   Sethi Electronics - ERP System
                 </span>
-                <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">
                   Internal Portal
                 </span>
               </div>
             </div>
 
-            {/* User Meta & Log Out */}
+            {/* User Meta & Dark Mode Toggle */}
             <div className="flex items-center gap-2 sm:gap-4">
+              {/* Dark Mode Toggle Button */}
+              <button
+                onClick={() => setIsDarkMode(prev => !prev)}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-800 cursor-pointer"
+                title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                id="dark-mode-toggle-btn"
+              >
+                {isDarkMode ? (
+                  <Sun className="h-5 w-5 text-amber-400 animate-spin-slow" />
+                ) : (
+                  <Moon className="h-5 w-5 text-indigo-600" />
+                )}
+              </button>
+
               <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-semibold text-slate-700 leading-tight">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight">
                   {user.displayName || 'Shop Admin'}
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500">
                   {user.email}
                 </span>
               </div>
-              <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt="Admin" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <User className="h-4 w-4 text-indigo-600" />
+                  <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 )}
               </div>
               {/* No sign-out needed */}
@@ -607,12 +639,12 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         
         {/* Banner with info */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm shadow-slate-100/40">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#111827] p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm shadow-slate-100/40 dark:shadow-none">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-950 tracking-tight">
+            <h1 className="text-2xl font-extrabold text-slate-950 dark:text-white tracking-tight">
               Customer Management
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               Create, edit, search, and manage customer sales records, and integrate WhatsApp messaging instantly.
             </p>
           </div>
@@ -631,57 +663,57 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
         {/* 3. Metrics Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-indigo-50 rounded-xl text-indigo-600">
+          <div className="bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl text-indigo-600 dark:text-indigo-400">
               <Coins className="h-6 w-6" />
             </div>
             <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="block text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 Total Business Sales
               </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-total-sales">
+              <span className="text-2xl font-bold text-slate-900 dark:text-white" id="metric-total-sales">
                 {formatCurrency(financialSummary.totalSales)}
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-emerald-50 rounded-xl text-emerald-600">
+          <div className="bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl text-emerald-600 dark:text-emerald-400">
               <Check className="h-6 w-6" />
             </div>
             <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="block text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 Collected Revenue
               </span>
-              <span className="text-2xl font-bold text-slate-900 text-emerald-600" id="metric-collected-revenue">
+              <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" id="metric-collected-revenue">
                 {formatCurrency(financialSummary.totalPaid)}
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-amber-50 rounded-xl text-amber-600">
+          <div className="bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl text-amber-600 dark:text-amber-400">
               <Clock className="h-6 w-6" />
             </div>
             <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="block text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 Outstanding Dues
               </span>
-              <span className={`text-2xl font-bold ${financialSummary.totalDue > 0 ? 'text-amber-600' : 'text-slate-900'}`} id="metric-outstanding-dues">
+              <span className={`text-2xl font-bold ${financialSummary.totalDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`} id="metric-outstanding-dues">
                 {formatCurrency(financialSummary.totalDue)}
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-violet-50 rounded-xl text-violet-600">
+          <div className="bg-white dark:bg-[#111827] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-violet-50 dark:bg-violet-950/30 rounded-xl text-violet-600 dark:text-violet-400">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="block text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 Active Warranties
               </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-active-warranties">
+              <span className="text-2xl font-bold text-slate-900 dark:text-white" id="metric-active-warranties">
                 {financialSummary.activeWarranties}
               </span>
             </div>
@@ -689,19 +721,19 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         </div>
 
         {/* 4. Controls Section (Search & Filter toggles) */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-[#111827] p-4 sm:p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search Input */}
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-slate-400" />
+                <Search className="h-5 w-5 text-slate-400 dark:text-slate-500" />
               </div>
               <input
                 type="text"
                 placeholder="Search by customer name, phone, or product..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="block w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-slate-50/50"
+                className="block w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-slate-50/50 dark:bg-slate-900/40"
                 id="search-bar"
               />
               {searchTerm && (
@@ -720,8 +752,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all w-full md:w-auto ${
                   showFilters || filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all'
-                    ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                    ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400'
+                    : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
                 id="filter-toggle-btn"
               >
@@ -738,7 +770,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               {(filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all' || searchTerm) && (
                 <button
                   onClick={handleResetFilters}
-                  className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-100 rounded-xl transition-all"
+                  className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 border border-slate-200 dark:border-slate-800 hover:border-red-100 dark:hover:border-red-900/30 rounded-xl transition-all"
                   id="reset-filters-btn"
                   title="Clear All Filters"
                 >
@@ -755,20 +787,20 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden border-t border-slate-100 pt-4"
+                className="overflow-hidden border-t border-slate-100 dark:border-slate-800 pt-4"
                 id="filters-expanded-panel"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 pb-1">
                   
                   {/* Address Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Filter by Address
                     </label>
                     <select
                       value={filterAddress}
                       onChange={(e) => setFilterAddress(e.target.value)}
-                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                       id="filter-address-select"
                     >
                       <option value="">All Addresses</option>
@@ -780,13 +812,13 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
                   {/* Product Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Filter by Product
                     </label>
                     <select
                       value={filterProduct}
                       onChange={(e) => setFilterProduct(e.target.value)}
-                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                       id="filter-product-select"
                     >
                       <option value="">All Products</option>
@@ -798,13 +830,13 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
                   {/* Warranty Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Filter by Warranty
                     </label>
                     <select
                       value={filterWarranty}
                       onChange={(e) => setFilterWarranty(e.target.value)}
-                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                       id="filter-warranty-select"
                     >
                       <option value="all">All Warranties</option>
@@ -816,13 +848,13 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
                   {/* Payment Status Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Payment Status
                     </label>
                     <select
                       value={filterPayment}
                       onChange={(e) => setFilterPayment(e.target.value)}
-                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                       id="filter-payment-select"
                     >
                       <option value="all">All Payments</option>
@@ -834,7 +866,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
                   {/* Price Range Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Price Range (₹)
                     </label>
                     <div className="flex gap-2 items-center">
@@ -843,16 +875,16 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                         placeholder="Min"
                         value={filterMinPrice}
                         onChange={(e) => setFilterMinPrice(e.target.value)}
-                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         id="filter-price-min"
                       />
-                      <span className="text-slate-400 text-xs font-medium">to</span>
+                      <span className="text-slate-400 dark:text-slate-500 text-xs font-medium">to</span>
                       <input
                         type="number"
                         placeholder="Max"
                         value={filterMaxPrice}
                         onChange={(e) => setFilterMaxPrice(e.target.value)}
-                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         id="filter-price-max"
                       />
                     </div>
@@ -860,14 +892,14 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
                   {/* Purchase Date Filter */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                       Purchase Date
                     </label>
                     <input
                       type="date"
                       value={filterDate}
                       onChange={(e) => setFilterDate(e.target.value)}
-                      className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      className="block w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                       id="filter-purchase-date"
                     />
                   </div>
@@ -924,20 +956,20 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         </AnimatePresence>
 
         {/* 6. Main Data Container (Desktop table / Mobile stack card) */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden" id="data-container">
+        <div className="bg-white dark:bg-[#111827] rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden" id="data-container">
           {loading ? (
             /* Loading State Skeleton */
             <div className="p-8 space-y-4" id="skeleton-loader">
               <div className="flex items-center justify-between">
-                <div className="h-6 bg-slate-100 rounded-lg w-1/4 animate-pulse" />
-                <div className="h-10 bg-slate-100 rounded-lg w-12 animate-pulse" />
+                <div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-lg w-1/4 animate-pulse" />
+                <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg w-12 animate-pulse" />
               </div>
-              <hr className="border-slate-100" />
+              <hr className="border-slate-100 dark:border-slate-800" />
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((idx) => (
                   <div key={idx} className="flex gap-4 items-center">
-                    <div className="h-4 bg-slate-100 rounded w-4 animate-pulse" />
-                    <div className="h-10 bg-slate-100 rounded-lg flex-1 animate-pulse" />
+                    <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-4 animate-pulse" />
+                    <div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg flex-1 animate-pulse" />
                   </div>
                 ))}
               </div>
@@ -945,13 +977,13 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
           ) : filteredCustomers.length === 0 ? (
             /* Empty State */
             <div className="p-12 text-center flex flex-col items-center justify-center" id="empty-state">
-              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-100 text-slate-400">
+              <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center mb-4 border border-slate-100 dark:border-slate-800 text-slate-400">
                 <User className="h-8 w-8" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900" id="empty-state-title">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white" id="empty-state-title">
                 No Customers Found
               </h3>
-              <p className="text-sm text-slate-500 mt-1.5 max-w-sm" id="empty-state-description">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 max-w-sm" id="empty-state-description">
                 {customers.length === 0 
                   ? "Sethi Electronics customer directory is currently empty. Click below to add your first customer record." 
                   : "No customer records match your selected filter criteria. Try clearing search or filter terms."}
@@ -971,7 +1003,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               ) : (
                 <button
                   onClick={handleResetFilters}
-                  className="mt-4 px-4 py-2 bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-semibold transition-all"
+                  className="mt-4 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
                   id="empty-state-clear-filters-btn"
                 >
                   Clear Search & Filters
@@ -984,7 +1016,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               <div className="hidden md:block overflow-x-auto" id="desktop-table-container">
                 <table className="w-full text-left border-collapse" id="customer-table">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold text-xs tracking-wider uppercase">
+                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold text-xs tracking-wider uppercase">
                       {/* Selection check */}
                       <th className="py-4 px-6 w-12 text-center">
                         <input
@@ -997,20 +1029,19 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                       </th>
                       <th className="py-4 px-6">Customer Details</th>
                       <th className="py-4 px-6">Product & Price</th>
-                      <th className="py-4 px-6">Warranty Status</th>
                       <th className="py-4 px-6">Payment & Dues</th>
                       <th className="py-4 px-6">Purchase Date</th>
                       <th className="py-4 px-6 text-center">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm text-slate-700 dark:text-slate-200">
                     {paginatedCustomers.map((customer) => {
                       const isSelected = selectedIds.has(customer.id);
                       return (
                         <tr
                           key={customer.id}
-                          className={`hover:bg-slate-50/50 transition-colors ${
-                            isSelected ? 'bg-indigo-50/30' : ''
+                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors ${
+                            isSelected ? 'bg-indigo-50/30 dark:bg-indigo-950/20' : ''
                           }`}
                           id={`row-${customer.id}`}
                         >
@@ -1047,32 +1078,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                   <span className="text-xs font-bold text-slate-900">
                                     {formatCurrency(purchase.purchasePrice)}
                                   </span>
-                                  <button
-                                    onClick={() => handleViewPurchaseInvoice(customer, purchase)}
-                                    className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-all"
-                                    title="Invoice for this purchase"
-                                  >
-                                    <FileText className="h-3.5 w-3.5" />
-                                  </button>
                                 </div>
                               ))}
-                            </div>
-                          </td>
-
-                          {/* Warranty Status */}
-                          <td className="py-3 px-6">
-                            <div className="space-y-3">
-                              {getCustomerPurchases(customer).map((purchase) => {
-                                const wInfo = getWarrantyStatus(purchase);
-                                return (
-                                  <div key={purchase.id} className="h-6 flex items-center">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold border ${wInfo.colorClass}`}>
-                                      <ShieldCheck className="h-3.5 w-3.5" />
-                                      <span>{wInfo.label}</span>
-                                    </span>
-                                  </div>
-                                );
-                              })}
                             </div>
                           </td>
 
@@ -1136,16 +1143,6 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                 title="Open WhatsApp Message"
                               >
                                 <Phone className="h-4.5 w-4.5" />
-                              </button>
-
-                              {/* Invoice / Cash Memo Action */}
-                              <button
-                                onClick={() => setInvoiceCustomer(customer)}
-                                className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
-                                id={`invoice-row-btn-${customer.id}`}
-                                title="Generate Invoice Cash Memo"
-                              >
-                                <FileText className="h-4.5 w-4.5" />
                               </button>
 
                               {/* Edit Action */}
@@ -1256,35 +1253,23 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className="text-xs font-extrabold text-indigo-600">
+                                  <div className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
                                     {formatCurrency(totalMob)}
                                   </div>
-                                  <button
-                                    onClick={() => handleViewPurchaseInvoice(customer, purchase)}
-                                    className="inline-flex items-center gap-0.5 text-[10px] text-indigo-600 font-bold hover:underline mt-1"
-                                  >
-                                    <FileText className="h-2.5 w-2.5" />
-                                    <span>Invoice</span>
-                                  </button>
                                 </div>
                               </div>
 
                               <div className="flex flex-wrap gap-1.5 pt-1">
-                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${wInfoMob.colorClass}`}>
-                                  <ShieldCheck className="h-2.5 w-2.5" />
-                                  <span>{wInfoMob.label}</span>
-                                </span>
-
                                 {statusMob === 'paid' ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/45">
                                     Fully Paid
                                   </span>
                                 ) : statusMob === 'pending' ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-100">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/45">
                                     Due: {formatCurrency(dueMob)}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 font-mono">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 font-mono dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/45">
                                     EMI DP: {formatCurrency(paidMob)}
                                   </span>
                                 )}
@@ -1336,18 +1321,18 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               </div>
 
               {/* PAGINATION CONTROLS */}
-              <div className="bg-slate-50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100" id="pagination-panel">
-                <span className="text-xs font-semibold text-slate-500">
-                  Showing <span className="text-slate-800">{Math.min(filteredCustomers.length, (currentPage - 1) * pageSize + 1)}</span> to{' '}
-                  <span className="text-slate-800">{Math.min(filteredCustomers.length, currentPage * pageSize)}</span> of{' '}
-                  <span className="text-slate-800">{filteredCustomers.length}</span> customer records
+              <div className="bg-slate-50 dark:bg-slate-900/60 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800" id="pagination-panel">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Showing <span className="text-slate-800 dark:text-slate-200">{Math.min(filteredCustomers.length, (currentPage - 1) * pageSize + 1)}</span> to{' '}
+                  <span className="text-slate-800 dark:text-slate-200">{Math.min(filteredCustomers.length, currentPage * pageSize)}</span> of{' '}
+                  <span className="text-slate-800 dark:text-slate-200">{filteredCustomers.length}</span> customer records
                 </span>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="p-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl transition-all disabled:opacity-40"
+                    className="p-2 bg-white dark:bg-[#1f2937] hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all disabled:opacity-40 cursor-pointer"
                     id="prev-page-btn"
                     title="Previous page"
                   >
@@ -1372,10 +1357,10 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                         <button
                           key={pageNum}
                           onClick={() => setCurrentPage(pageNum)}
-                          className={`w-8.5 h-8.5 text-xs font-bold rounded-xl transition-all border ${
+                          className={`w-8.5 h-8.5 text-xs font-bold rounded-xl transition-all border cursor-pointer ${
                             currentPage === pageNum
                               ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/10'
-                              : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-600'
+                              : 'bg-white dark:bg-[#1f2937] border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}
                           id={`page-btn-${pageNum}`}
                         >
@@ -1388,7 +1373,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl transition-all disabled:opacity-40"
+                    className="p-2 bg-white dark:bg-[#1f2937] hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all disabled:opacity-40 cursor-pointer"
                     id="next-page-btn"
                     title="Next page"
                   >
@@ -1402,7 +1387,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       </main>
 
       {/* Footer info line */}
-      <footer className="w-full text-center py-6 border-t border-slate-100 bg-white text-xs text-slate-400">
+      <footer className="w-full text-center py-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#111827] text-xs text-slate-400 dark:text-slate-500">
         Sethi Electronics internal database portal. Powered by Cloud Firestore.
       </footer>
 
@@ -1549,25 +1534,42 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {nextUnsentCustomer ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSendSingleBroadcast(nextUnsentCustomer)}
+                          className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/10 transition-all cursor-pointer animate-pulse"
+                        >
+                          <Send className="w-4 h-4" />
+                          <span>Open Chat for {nextUnsentCustomer.customerName}</span>
+                        </button>
+                      ) : (
+                        <div className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 rounded-xl">
+                          <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+                          <span>All Selected Chats Opened!</span>
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         onClick={handleSendAllBroadcast}
                         disabled={isSimulatingBroadcast}
-                        className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/10 transition-all disabled:opacity-50 cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-[11px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-indigo-100 dark:border-slate-700 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+                        title="Tries to open all tabs at once sequentially using timers"
                       >
                         {isSimulatingBroadcast ? (
                           <>
-                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                             Opening Tabs sequentially...
                           </>
                         ) : (
                           <>
-                            <Send className="w-4 h-4" />
-                            <span>Open Chats for All Selected ({selectedIds.size})</span>
+                            <span>Try Sequential Auto-Open (Popups must be allowed)</span>
                           </>
                         )}
                       </button>
+
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -1575,14 +1577,14 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                             setSentBroadcastIds(new Set());
                             onAddToast("Broadcast progress reset", "info");
                           }}
-                          className="w-1/2 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer"
+                          className="w-1/2 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all cursor-pointer"
                         >
                           Reset Progress
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsBroadcastOpen(false)}
-                          className="w-1/2 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer"
+                          className="w-1/2 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all cursor-pointer"
                         >
                           Close
                         </button>
@@ -1703,13 +1705,6 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
           </div>
         )}
       </AnimatePresence>
-
-      {/* 10. Modal: Customer Printable Invoice Cash Memo */}
-      <InvoiceModal
-        isOpen={invoiceCustomer !== null}
-        onClose={() => setInvoiceCustomer(null)}
-        customer={invoiceCustomer}
-      />
     </div>
   );
 }
