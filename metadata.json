@@ -1,0 +1,6 @@
+{
+  "name": "Sethi Electronics - ERP System",
+  "description": "Enterprise Resource Planning and Customer Management portal for Sethi Electronics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

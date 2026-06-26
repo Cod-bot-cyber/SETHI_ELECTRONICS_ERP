@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "customer": {
+      "title": "Customer",
+      "description": "Customer record for Sethi Electronics",
+      "type": "object",
+      "properties": {
+        "customerName": {
+          "type": "string",
+          "description": "Name of the customer"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Phone number containing only digits"
+        },
+        "address": {
+          "type": "string",
+          "description": "Physical address of the customer"
+        },
+        "productPurchased": {
+          "type": "string",
+          "description": "Product purchased from Sethi Electronics"
+        },
+        "purchasePrice": {
+          "type": "number",
+          "description": "Purchase price of the product"
+        },
+        "purchaseDate": {
+          "type": "object",
+          "format": "timestamp",
+          "description": "Date of the purchase"
+        },
+        "createdAt": {
+          "type": "object",
+          "format": "timestamp",
+          "description": "Timestamp when the record was created"
+        }
+      },
+      "required": [
+        "customerName",
+        "phoneNumber",
+        "address",
+        "productPurchased",
+        "purchasePrice",
+        "purchaseDate",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "customers/{customerId}": {
+      "schema": "customer",
+      "description": "Collection containing all customer records"
+    }
+  }
+}
