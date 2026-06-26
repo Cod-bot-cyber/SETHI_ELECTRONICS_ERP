@@ -35,7 +35,8 @@ import {
   Fingerprint,
   WifiOff,
   Wifi,
-  Bell
+  Bell,
+  Megaphone
 } from 'lucide-react';
 import {
   collection,
@@ -173,6 +174,14 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     "Hello {{CustomerName}},\n\nThank you for purchasing {{ProductPurchased}} from Sethi Electronics.\n\nWe appreciate your support!"
   );
   const [isSimulatingBroadcast, setIsSimulatingBroadcast] = useState(false);
+
+  // Launch a Deal state
+  const [isLaunchDealOpen, setIsLaunchDealOpen] = useState(false);
+  const [sentLaunchDealIds, setSentLaunchDealIds] = useState<Set<string>>(new Set());
+  const [launchDealTemplate, setLaunchDealTemplate] = useState(
+    "GREETING FROM SETHI ELECTRONICS !\nExciting news! We have launched a special deals week. Visit Sethi Electronics today or reply to this message to know more about special discounts!"
+  );
+  const [isSimulatingLaunchDeal, setIsSimulatingLaunchDeal] = useState(false);
 
   // Real-time Firestore subscription
   useEffect(() => {
@@ -734,6 +743,58 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     });
   };
 
+  const nextUnsentLaunchDealCustomer = useMemo(() => {
+    return customers.find(c => !sentLaunchDealIds.has(c.id));
+  }, [customers, sentLaunchDealIds]);
+
+  const handleSendSingleLaunchDeal = (customer: Customer) => {
+    const parsedMessage = launchDealTemplate
+      .replace(/\{\{CustomerName\}\}/g, customer.customerName)
+      .replace(/\{\{ProductPurchased\}\}/g, customer.productPurchased);
+    
+    const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
+    const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(parsedMessage)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    
+    setSentLaunchDealIds(prev => {
+      const next = new Set(prev);
+      next.add(customer.id);
+      return next;
+    });
+  };
+
+  const handleSendAllLaunchDeal = () => {
+    if (customers.length === 0) return;
+
+    setIsSimulatingLaunchDeal(true);
+    
+    customers.forEach((customer, idx) => {
+      setTimeout(() => {
+        const parsedMessage = launchDealTemplate
+          .replace(/\{\{CustomerName\}\}/g, customer.customerName)
+          .replace(/\{\{ProductPurchased\}\}/g, customer.productPurchased);
+        
+        const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
+        const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(parsedMessage)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+
+        setSentLaunchDealIds(prev => {
+          const next = new Set(prev);
+          next.add(customer.id);
+          return next;
+        });
+
+        if (idx === customers.length - 1) {
+          setIsSimulatingLaunchDeal(false);
+          setIsLaunchDealOpen(false);
+          onAddToast(`Opened WhatsApp chat tabs for all ${customers.length} customers successfully!`, 'success');
+        }
+      }, idx * 1000);
+    });
+  };
+
   const handleAuthenticate = () => {
     if (authStatus !== 'idle') return;
     setAuthStatus('authenticating');
@@ -1119,17 +1180,30 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               Create, edit, search, and manage customer sales records, and integrate WhatsApp messaging instantly.
             </p>
           </div>
-          <button
-            onClick={() => {
-              setModalCustomer(null);
-              setIsModalOpen(true);
-            }}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-sm transition-all shadow-md shadow-indigo-600/10 cursor-pointer self-start md:self-auto shrink-0"
-            id="add-customer-top-btn"
-          >
-            <Plus className="w-4 h-4" />
-            Add Customer
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto shrink-0">
+            <button
+              onClick={() => {
+                setSentLaunchDealIds(new Set());
+                setIsLaunchDealOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-semibold rounded-xl text-sm transition-all shadow-md shadow-amber-500/10 cursor-pointer"
+              id="launch-deal-top-btn"
+            >
+              <Megaphone className="w-4 h-4" />
+              Launch a Deal
+            </button>
+            <button
+              onClick={() => {
+                setModalCustomer(null);
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-sm transition-all shadow-md shadow-indigo-600/10 cursor-pointer"
+              id="add-customer-top-btn"
+            >
+              <Plus className="w-4 h-4" />
+              Add Customer
+            </button>
+          </div>
         </div>
 
         {/* 3. Metrics Row */}
@@ -2070,6 +2144,190 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                           type="button"
                           onClick={() => setIsBroadcastOpen(false)}
                           className="w-1/2 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all cursor-pointer"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 9.5. Modal: Launch a Deal Campaign Assistant */}
+      <AnimatePresence>
+        {isLaunchDealOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-slate-900/40 backdrop-blur-sm" id="launch-deal-modal-overlay">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-[#1e293b] rounded-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden z-10 my-auto"
+              id="launch-deal-modal-content"
+            >
+              <div className="h-2 bg-amber-500 w-full" />
+              
+              <div className="p-6 sm:p-8 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-950 dark:text-white flex items-center gap-2">
+                      <span className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-lg">
+                        <Megaphone className="w-5 h-5" />
+                      </span>
+                      Launch a Deal Campaign
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      Draft a customized promotional message and dispatch it to all your customers registered in the database.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsLaunchDealOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left Column: Template Editor & Message Preview */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                        Customize Campaign Message
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={launchDealTemplate}
+                        onChange={(e) => setLaunchDealTemplate(e.target.value)}
+                        className="block w-full text-slate-900 dark:text-white bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/15 focus:border-amber-500 transition-all font-sans"
+                        placeholder="Type deal message..."
+                      />
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 block">
+                        Dynamic tags: <code className="font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1 py-0.5 rounded">{"{{CustomerName}}"}</code>, <code className="font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1 py-0.5 rounded">{"{{ProductPurchased}}"}</code>.
+                      </span>
+                    </div>
+
+                    {/* WhatsApp-Style Live Preview Bubble */}
+                    <div className="space-y-1.5">
+                      <span className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Live Campaign Preview
+                      </span>
+                      <div className="bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat p-4 rounded-xl border border-slate-200 dark:border-slate-700 min-h-[120px] flex items-end">
+                        <div className="bg-[#d9fdd3] dark:bg-[#054740] text-slate-800 dark:text-slate-100 p-3 rounded-xl rounded-tr-none shadow-xs text-xs font-sans max-w-[90%] ml-auto relative">
+                          <span className="whitespace-pre-wrap block">
+                            {(() => {
+                              const firstCustomer = customers[0];
+                              const name = firstCustomer?.customerName || 'Customer Name';
+                              const product = firstCustomer?.productPurchased || 'Product Name';
+                              return launchDealTemplate
+                                .replace(/\{\{CustomerName\}\}/g, name)
+                                .replace(/\{\{ProductPurchased\}\}/g, product);
+                            })()}
+                          </span>
+                          <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium float-right mt-1 font-mono">
+                            12:00 PM ✓✓
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: All Customers Numbers list aligned */}
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                          Recipients Queue ({customers.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                          {sentLaunchDealIds.size} of {customers.length} Sent
+                        </span>
+                      </div>
+                      
+                      <div className="bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 max-h-64 overflow-y-auto space-y-2">
+                        {customers.map(c => {
+                          const isSent = sentLaunchDealIds.has(c.id);
+                          return (
+                            <div key={'launch_deal_' + c.id} className="flex justify-between items-center bg-white dark:bg-[#111827] p-2.5 rounded-xl shadow-xs border border-slate-100 dark:border-slate-800/60 text-xs">
+                              <div className="space-y-0.5 max-w-[60%]">
+                                <span className="font-bold text-slate-800 dark:text-slate-100 block truncate">{c.customerName}</span>
+                                <span className="text-slate-400 dark:text-slate-500 font-mono block">{c.phoneNumber}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {isSent ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30">
+                                    ✓ Opened
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSendSingleLaunchDeal(c)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                  >
+                                    Open Chat
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {nextUnsentLaunchDealCustomer ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSendSingleLaunchDeal(nextUnsentLaunchDealCustomer)}
+                          className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md shadow-amber-500/10 transition-all cursor-pointer animate-pulse"
+                        >
+                          <Send className="w-4 h-4" />
+                          <span>Open Chat for {nextUnsentLaunchDealCustomer.customerName}</span>
+                        </button>
+                      ) : (
+                        <div className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 rounded-xl">
+                          <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+                          <span>All Campaigns Chats Opened!</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleSendAllLaunchDeal}
+                        disabled={isSimulatingLaunchDeal || customers.length === 0}
+                        className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-[11px] font-semibold bg-amber-50 hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-amber-800 dark:text-slate-200 border border-amber-100 dark:border-slate-700 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+                        title="Tries to open all tabs at once sequentially using timers"
+                      >
+                        {isSimulatingLaunchDeal ? (
+                          <>
+                            <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                            Opening Tabs sequentially...
+                          </>
+                        ) : (
+                          <>
+                            <span>Send Campaign to All Customers (Popups must be allowed)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSentLaunchDealIds(new Set());
+                            onAddToast("Campaign progress reset", "info");
+                          }}
+                          className="w-1/2 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all cursor-pointer"
+                        >
+                          Reset Progress
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsLaunchDealOpen(false)}
+                          className="w-1/2 py-2 text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all cursor-pointer"
                         >
                           Close
                         </button>
