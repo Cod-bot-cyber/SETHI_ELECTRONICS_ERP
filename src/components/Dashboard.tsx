@@ -618,14 +618,12 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   const handleAuthenticate = () => {
     if (authStatus !== 'idle') return;
     setAuthStatus('authenticating');
-    onAddToast('Establishing secure portal connection...', 'info');
     setTimeout(() => {
       setAuthStatus('success');
-      onAddToast('Access granted! Unlocking administrative portal...', 'success');
       setTimeout(() => {
         setIsUnlocked(true);
-      }, 700);
-    }, 1500);
+      }, 300);
+    }, 600);
   };
 
   return (
@@ -827,35 +825,6 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
             {/* User Meta & Dark Mode Toggle */}
             <div className="flex items-center gap-2 sm:gap-4">
-              {/* Simulate Offline Button */}
-              <button
-                onClick={() => {
-                  const targetState = !isSimulatedOffline;
-                  setIsSimulatedOffline(targetState);
-                  if (targetState) {
-                    onAddToast("Offline simulation started", "info");
-                  } else {
-                    onAddToast("Connected back online", "success");
-                  }
-                }}
-                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  isSimulatedOffline
-                    ? 'bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/30'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 border-transparent dark:border-slate-800'
-                }`}
-                title={isSimulatedOffline ? "Simulating Offline: Click to connect online" : "Simulate Offline State for Testing"}
-                id="offline-simulate-toggle-btn"
-              >
-                {isSimulatedOffline ? (
-                  <WifiOff className="h-4.5 w-4.5 animate-pulse text-red-500" />
-                ) : (
-                  <Wifi className="h-4.5 w-4.5 text-indigo-500" />
-                )}
-                <span className="text-[9px] font-extrabold uppercase tracking-widest hidden md:inline-block">
-                  {isSimulatedOffline ? 'Sim Offline' : 'Test Offline'}
-                </span>
-              </button>
-
               {/* Dark Mode Toggle Button */}
               <button
                 onClick={() => setIsDarkMode(prev => !prev)}
