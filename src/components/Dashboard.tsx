@@ -22,7 +22,6 @@ import {
   CalendarDays,
   FilterX
 } from 'lucide-react';
-import { signOut, User as FirebaseUser } from 'firebase/auth';
 import {
   collection,
   onSnapshot,
@@ -35,13 +34,17 @@ import {
   Timestamp,
   writeBatch
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError } from '../firebase';
+import { db, handleFirestoreError } from '../firebase';
 import { Customer, CustomerInput, OperationType } from '../types';
 import CustomerModal from './CustomerModal';
 import DeleteDialog from './DeleteDialog';
 
 interface DashboardProps {
-  user: FirebaseUser;
+  user: {
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
+  };
   onAddToast: (text: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -112,16 +115,6 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     const products = customers.map(c => c.productPurchased.trim()).filter(Boolean);
     return Array.from(new Set(products)).sort();
   }, [customers]);
-
-  // Handle manual sign out
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      onAddToast('Signed out successfully', 'info');
-    } catch (err) {
-      onAddToast('Failed to sign out', 'error');
-    }
-  };
 
   // Multiple selection handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -383,14 +376,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                   <User className="h-4 w-4 text-indigo-600" />
                 )}
               </div>
-              <button
-                onClick={handleSignOut}
-                className="flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
-                id="sign-out-btn"
-                title="Sign Out"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
+              {/* No sign-out needed */}
             </div>
           </div>
         </div>
