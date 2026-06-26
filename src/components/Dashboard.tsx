@@ -11,7 +11,6 @@ import {
   Phone,
   Trash2,
   Edit3,
-  Cpu,
   MapPin,
   Laptop,
   Coins,
@@ -20,7 +19,14 @@ import {
   Check,
   FileJson,
   CalendarDays,
-  FilterX
+  FilterX,
+  ShieldCheck,
+  FileText,
+  Percent,
+  Clock,
+  AlertCircle,
+  Eye,
+  PlusCircle
 } from 'lucide-react';
 import {
   collection,
@@ -35,9 +41,10 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../firebase';
-import { Customer, CustomerInput, OperationType } from '../types';
+import { Customer, CustomerInput, OperationType, Purchase } from '../types';
 import CustomerModal from './CustomerModal';
 import DeleteDialog from './DeleteDialog';
+import InvoiceModal from './InvoiceModal';
 
 interface DashboardProps {
   user: {
@@ -61,6 +68,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   const [filterDate, setFilterDate] = useState('');
   const [filterMinPrice, setFilterMinPrice] = useState('');
   const [filterMaxPrice, setFilterMaxPrice] = useState('');
+  const [filterWarranty, setFilterWarranty] = useState<string>('all');
+  const [filterPayment, setFilterPayment] = useState<string>('all');
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,6 +81,13 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   // Modal and Dialog states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalCustomer, setModalCustomer] = useState<Customer | null>(null);
+  const [invoiceCustomer, setInvoiceCustomer] = useState<Customer | null>(null);
+
+  // Duplicate Check state
+  const [duplicateCheckData, setDuplicateCheckData] = useState<{
+    existingCustomer: Customer;
+    newPurchaseInput: CustomerInput;
+  } | null>(null);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
@@ -111,9 +127,63 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     return Array.from(new Set(addresses)).sort();
   }, [customers]);
 
+  // Helper to retrieve all purchases for a customer, with backward-compatibility fallback
+  const getCustomerPurchases = (customer: Customer): Purchase[] => {
+    if (customer.purchaseHistory && customer.purchaseHistory.length > 0) {
+      return customer.purchaseHistory;
+    }
+    return [{
+      id: 'p_initial',
+      productPurchased: customer.productPurchased,
+      purchasePrice: customer.purchasePrice,
+      purchaseDate: customer.purchaseDate,
+      warrantyMonths: customer.warrantyMonths ?? 12,
+      paymentStatus: customer.paymentStatus ?? 'paid',
+      amountPaid: customer.amountPaid ?? customer.purchasePrice,
+    }];
+  };
+
   const uniqueProducts = useMemo(() => {
-    const products = customers.map(c => c.productPurchased.trim()).filter(Boolean);
+    const products: string[] = [];
+    customers.forEach(c => {
+      getCustomerPurchases(c).forEach(p => {
+        if (p.productPurchased) {
+          products.push(p.productPurchased.trim());
+        }
+      });
+    });
     return Array.from(new Set(products)).sort();
+  }, [customers]);
+
+  const financialSummary = useMemo(() => {
+    let totalSales = 0;
+    let totalPaid = 0;
+    let activeWarranties = 0;
+    const today = new Date();
+
+    customers.forEach((c) => {
+      const purchases = getCustomerPurchases(c);
+      purchases.forEach((p) => {
+        totalSales += p.purchasePrice;
+        totalPaid += p.amountPaid ?? p.purchasePrice;
+
+        if (p.warrantyMonths && p.warrantyMonths > 0) {
+          const pDate = p.purchaseDate?.toDate ? p.purchaseDate.toDate() : new Date(p.purchaseDate);
+          const expDate = new Date(pDate);
+          expDate.setMonth(expDate.getMonth() + p.warrantyMonths);
+          if (expDate.getTime() > today.getTime()) {
+            activeWarranties++;
+          }
+        }
+      });
+    });
+
+    return {
+      totalSales,
+      totalPaid,
+      totalDue: Math.max(0, totalSales - totalPaid),
+      activeWarranties,
+    };
   }, [customers]);
 
   // Multiple selection handlers
@@ -156,15 +226,50 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     });
   };
 
+  // Helper to determine if warranty is active, expired, or n/a
+  const getWarrantyStatus = (item: { purchaseDate?: any; warrantyMonths?: number }) => {
+    if (item.warrantyMonths === 0 || item.warrantyMonths === undefined) {
+      return { status: 'none', label: 'No Warranty', daysLeft: 0, colorClass: 'bg-slate-100 text-slate-600 border-slate-200' };
+    }
+    
+    const pDate = item.purchaseDate?.toDate ? item.purchaseDate.toDate() : new Date(item.purchaseDate);
+    const expDate = new Date(pDate);
+    expDate.setMonth(expDate.getMonth() + item.warrantyMonths);
+    
+    const today = new Date();
+    const msDiff = expDate.getTime() - today.getTime();
+    const daysLeft = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
+    
+    if (daysLeft > 0) {
+      return {
+        status: 'active',
+        label: `Active • ${daysLeft}d left`,
+        expiryDate: expDate,
+        daysLeft,
+        colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-100'
+      };
+    } else {
+      return {
+        status: 'expired',
+        label: 'Expired',
+        expiryDate: expDate,
+        daysLeft,
+        colorClass: 'bg-rose-50 text-rose-700 border-rose-100'
+      };
+    }
+  };
+
   // Real-time compound filtering and search logic
   const filteredCustomers = useMemo(() => {
     return customers.filter(customer => {
+      const purchases = getCustomerPurchases(customer);
+
       // 1. Search filter
       const searchLower = searchTerm.toLowerCase().trim();
       const matchesSearch = !searchLower || 
         customer.customerName.toLowerCase().includes(searchLower) ||
         customer.phoneNumber.includes(searchLower) ||
-        customer.productPurchased.toLowerCase().includes(searchLower);
+        purchases.some(p => p.productPurchased.toLowerCase().includes(searchLower));
 
       // 2. Address filter
       const matchesAddress = !filterAddress || 
@@ -172,32 +277,54 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
       // 3. Product filter
       const matchesProduct = !filterProduct || 
-        customer.productPurchased.toLowerCase().includes(filterProduct.toLowerCase());
+        purchases.some(p => p.productPurchased.toLowerCase().includes(filterProduct.toLowerCase()));
 
       // 4. Date filter (exact or year/month match)
       let matchesDate = true;
-      if (filterDate && customer.purchaseDate) {
-        const pDate = customer.purchaseDate.toDate ? customer.purchaseDate.toDate() : new Date(customer.purchaseDate);
-        const filterDateObj = new Date(filterDate);
-        matchesDate = 
-          pDate.getFullYear() === filterDateObj.getFullYear() &&
-          pDate.getMonth() === filterDateObj.getMonth() &&
-          pDate.getDate() === filterDateObj.getDate();
+      if (filterDate) {
+        matchesDate = purchases.some(p => {
+          if (!p.purchaseDate) return false;
+          const pDate = p.purchaseDate.toDate ? p.purchaseDate.toDate() : new Date(p.purchaseDate);
+          const filterDateObj = new Date(filterDate);
+          return (
+            pDate.getFullYear() === filterDateObj.getFullYear() &&
+            pDate.getMonth() === filterDateObj.getMonth() &&
+            pDate.getDate() === filterDateObj.getDate()
+          );
+        });
       }
 
       // 5. Price range filters
       const minVal = filterMinPrice ? Number(filterMinPrice) : -Infinity;
       const maxVal = filterMaxPrice ? Number(filterMaxPrice) : Infinity;
-      const matchesPrice = customer.purchasePrice >= minVal && customer.purchasePrice <= maxVal;
+      const matchesPrice = purchases.some(p => p.purchasePrice >= minVal && p.purchasePrice <= maxVal);
 
-      return matchesSearch && matchesAddress && matchesProduct && matchesDate && matchesPrice;
+      // 6. Warranty filter
+      let matchesWarranty = true;
+      if (filterWarranty !== 'all') {
+        matchesWarranty = purchases.some(p => {
+          const wInfo = getWarrantyStatus(p);
+          return wInfo.status === filterWarranty;
+        });
+      }
+
+      // 7. Payment filter
+      let matchesPayment = true;
+      if (filterPayment !== 'all') {
+        matchesPayment = purchases.some(p => {
+          const pStatus = p.paymentStatus ?? 'paid';
+          return pStatus === filterPayment;
+        });
+      }
+
+      return matchesSearch && matchesAddress && matchesProduct && matchesDate && matchesPrice && matchesWarranty && matchesPayment;
     });
-  }, [customers, searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice]);
+  }, [customers, searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment]);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice]);
+  }, [searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment]);
 
   // Pagination bounds
   const totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1;
@@ -213,6 +340,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     setFilterDate('');
     setFilterMinPrice('');
     setFilterMaxPrice('');
+    setFilterWarranty('all');
+    setFilterPayment('all');
     setSearchTerm('');
     onAddToast('All filters cleared', 'info');
   };
@@ -220,6 +349,20 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   // Add / Edit submission
   const handleSaveCustomer = async (input: CustomerInput) => {
     try {
+      if (!modalCustomer) {
+        // ADD Mode - check for duplicate customer phone number
+        const existingCustomer = customers.find(
+          c => c.phoneNumber.replace(/\D/g, '') === input.phoneNumber.replace(/\D/g, '')
+        );
+        if (existingCustomer) {
+          setDuplicateCheckData({
+            existingCustomer,
+            newPurchaseInput: input
+          });
+          return;
+        }
+      }
+
       const priceVal = Number(input.purchasePrice);
       // Construct date object using local date format so that we store local timezone correctly
       const dateParts = input.purchaseDate.split('-');
@@ -232,6 +375,9 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         productPurchased: input.productPurchased.trim(),
         purchasePrice: priceVal,
         purchaseDate: Timestamp.fromDate(pDate),
+        warrantyMonths: Number(input.warrantyMonths),
+        paymentStatus: input.paymentStatus,
+        amountPaid: input.paymentStatus === 'paid' ? priceVal : Number(input.amountPaid),
       };
 
       if (modalCustomer) {
@@ -241,7 +387,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         await updateDoc(docRef, payload);
         onAddToast(`Updated ${input.customerName} successfully`, 'success');
       } else {
-        // ADD Mode
+        // ADD Mode - no duplicate found, safe to create
         payload.createdAt = Timestamp.now();
         await addDoc(collection(db, 'customers'), payload);
         onAddToast(`Saved ${input.customerName} as a customer`, 'success');
@@ -251,6 +397,62 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       onAddToast('An error occurred while saving customer record.', 'error');
       throw error;
     }
+  };
+
+  // Append new purchase to duplicate customer
+  const handleConfirmAddPurchase = async () => {
+    if (!duplicateCheckData) return;
+    const { existingCustomer, newPurchaseInput } = duplicateCheckData;
+    
+    try {
+      const priceVal = Number(newPurchaseInput.purchasePrice);
+      const dateParts = newPurchaseInput.purchaseDate.split('-');
+      const pDate = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
+      
+      const newPurchase: Purchase = {
+        id: `p_${Date.now()}`,
+        productPurchased: newPurchaseInput.productPurchased.trim(),
+        purchasePrice: priceVal,
+        purchaseDate: Timestamp.fromDate(pDate),
+        warrantyMonths: Number(newPurchaseInput.warrantyMonths),
+        paymentStatus: newPurchaseInput.paymentStatus,
+        amountPaid: newPurchaseInput.paymentStatus === 'paid' ? priceVal : Number(newPurchaseInput.amountPaid),
+      };
+
+      const history = getCustomerPurchases(existingCustomer);
+      const updatedHistory = [...history, newPurchase];
+
+      const docRef = doc(db, 'customers', existingCustomer.id);
+      await updateDoc(docRef, {
+        productPurchased: newPurchase.productPurchased,
+        purchasePrice: newPurchase.purchasePrice,
+        purchaseDate: newPurchase.purchaseDate,
+        warrantyMonths: newPurchase.warrantyMonths,
+        paymentStatus: newPurchase.paymentStatus,
+        amountPaid: newPurchase.amountPaid,
+        purchaseHistory: updatedHistory,
+      });
+
+      onAddToast(`Added ${newPurchase.productPurchased} purchase to existing customer ${existingCustomer.customerName} successfully!`, 'success');
+      setDuplicateCheckData(null);
+    } catch (error) {
+      console.error('Failed to add purchase to existing customer:', error);
+      onAddToast('An error occurred while adding purchase.', 'error');
+    }
+  };
+
+  // View specific purchase invoice
+  const handleViewPurchaseInvoice = (customer: Customer, purchase: Purchase) => {
+    const tempCustomer: Customer = {
+      ...customer,
+      productPurchased: purchase.productPurchased,
+      purchasePrice: purchase.purchasePrice,
+      purchaseDate: purchase.purchaseDate,
+      warrantyMonths: purchase.warrantyMonths,
+      paymentStatus: purchase.paymentStatus,
+      amountPaid: purchase.amountPaid,
+    };
+    setInvoiceCustomer(tempCustomer);
   };
 
   // Trigger Edit modal
@@ -345,9 +547,10 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             {/* Logo */}
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-md shadow-indigo-600/10">
-                <Cpu className="h-5 w-5" />
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-600/20 font-sans font-black text-sm tracking-tighter" id="custom-logo">
+                <span className="relative z-10">SE</span>
+                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" title="System Online" />
               </div>
               <div>
                 <span className="font-extrabold bg-gradient-to-r from-slate-900 to-indigo-950 bg-clip-text text-transparent text-base sm:text-lg block tracking-tight leading-none">
@@ -412,56 +615,56 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="p-3.5 bg-indigo-50 rounded-xl text-indigo-600">
-              <User className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Total Registered
-              </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-total-customers">
-                {customers.length}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-green-50 rounded-xl text-green-600">
               <Coins className="h-6 w-6" />
             </div>
             <div>
               <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Total Business Value
+                Total Business Sales
               </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-total-revenue">
-                {formatCurrency(customers.reduce((acc, curr) => acc + curr.purchasePrice, 0))}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-indigo-50 rounded-xl text-indigo-600">
-              <Laptop className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Products Sold
-              </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-unique-products">
-                {uniqueProducts.length}
+              <span className="text-2xl font-bold text-slate-900" id="metric-total-sales">
+                {formatCurrency(financialSummary.totalSales)}
               </span>
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-3.5 bg-blue-50 rounded-xl text-blue-600">
-              <MapPin className="h-6 w-6" />
+            <div className="p-3.5 bg-emerald-50 rounded-xl text-emerald-600">
+              <Check className="h-6 w-6" />
             </div>
             <div>
               <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Covered Localities
+                Collected Revenue
               </span>
-              <span className="text-2xl font-bold text-slate-900" id="metric-unique-addresses">
-                {uniqueAddresses.length}
+              <span className="text-2xl font-bold text-slate-900 text-emerald-600" id="metric-collected-revenue">
+                {formatCurrency(financialSummary.totalPaid)}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-amber-50 rounded-xl text-amber-600">
+              <Clock className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Outstanding Dues
+              </span>
+              <span className={`text-2xl font-bold ${financialSummary.totalDue > 0 ? 'text-amber-600' : 'text-slate-900'}`} id="metric-outstanding-dues">
+                {formatCurrency(financialSummary.totalDue)}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
+            <div className="p-3.5 bg-violet-50 rounded-xl text-violet-600">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Active Warranties
+              </span>
+              <span className="text-2xl font-bold text-slate-900" id="metric-active-warranties">
+                {financialSummary.activeWarranties}
               </span>
             </div>
           </div>
@@ -498,7 +701,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all w-full md:w-auto ${
-                  showFilters || filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice
+                  showFilters || filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all'
                     ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
                     : 'border-slate-200 hover:bg-slate-50 text-slate-700'
                 }`}
@@ -506,15 +709,15 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 <span>Filters</span>
-                {(filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice) && (
+                {(filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all') && (
                   <span className="ml-1 px-2 py-0.5 text-xs bg-indigo-600 text-white rounded-full font-bold">
-                    {[filterAddress, filterProduct, filterDate, filterMinPrice || filterMaxPrice].filter(Boolean).length}
+                    {[filterAddress, filterProduct, filterDate, filterMinPrice || filterMaxPrice, filterWarranty !== 'all' ? 'w' : '', filterPayment !== 'all' ? 'p' : ''].filter(Boolean).length}
                   </span>
                 )}
               </button>
 
               {/* Reset Filters Quick Button if active */}
-              {(filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || searchTerm) && (
+              {(filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all' || searchTerm) && (
                 <button
                   onClick={handleResetFilters}
                   className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 hover:border-red-100 rounded-xl transition-all"
@@ -537,7 +740,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                 className="overflow-hidden border-t border-slate-100 pt-4"
                 id="filters-expanded-panel"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pb-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 pb-1">
                   
                   {/* Address Filter */}
                   <div>
@@ -575,6 +778,42 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                     </select>
                   </div>
 
+                  {/* Warranty Filter */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Filter by Warranty
+                    </label>
+                    <select
+                      value={filterWarranty}
+                      onChange={(e) => setFilterWarranty(e.target.value)}
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      id="filter-warranty-select"
+                    >
+                      <option value="all">All Warranties</option>
+                      <option value="active">Active Warranty</option>
+                      <option value="expired">Expired Warranty</option>
+                      <option value="none">No Warranty</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Status Filter */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Payment Status
+                    </label>
+                    <select
+                      value={filterPayment}
+                      onChange={(e) => setFilterPayment(e.target.value)}
+                      className="block w-full py-2.5 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                      id="filter-payment-select"
+                    >
+                      <option value="all">All Payments</option>
+                      <option value="paid">Fully Paid</option>
+                      <option value="pending">Due / Pending</option>
+                      <option value="emi">Installment / EMI</option>
+                    </select>
+                  </div>
+
                   {/* Price Range Filter */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -586,7 +825,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                         placeholder="Min"
                         value={filterMinPrice}
                         onChange={(e) => setFilterMinPrice(e.target.value)}
-                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         id="filter-price-min"
                       />
                       <span className="text-slate-400 text-xs font-medium">to</span>
@@ -595,7 +834,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                         placeholder="Max"
                         value={filterMaxPrice}
                         onChange={(e) => setFilterMaxPrice(e.target.value)}
-                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        className="block w-full py-2 px-3 rounded-xl border border-slate-200 text-slate-900 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         id="filter-price-max"
                       />
                     </div>
@@ -604,7 +843,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                   {/* Purchase Date Filter */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                      Purchase Date (Exact)
+                      Purchase Date
                     </label>
                     <input
                       type="date"
@@ -738,11 +977,10 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                           aria-label="Select all customers on current page"
                         />
                       </th>
-                      <th className="py-4 px-6">Customer Name</th>
-                      <th className="py-4 px-6">Phone Number</th>
-                      <th className="py-4 px-6">Address</th>
-                      <th className="py-4 px-6">Product Purchased</th>
-                      <th className="py-4 px-6">Purchase Price</th>
+                      <th className="py-4 px-6">Customer Details</th>
+                      <th className="py-4 px-6">Product & Price</th>
+                      <th className="py-4 px-6">Warranty Status</th>
+                      <th className="py-4 px-6">Payment & Dues</th>
                       <th className="py-4 px-6">Purchase Date</th>
                       <th className="py-4 px-6 text-center">Actions</th>
                     </tr>
@@ -770,37 +1008,103 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                             />
                           </td>
 
-                          {/* Customer Name */}
-                          <td className="py-3 px-6 font-semibold text-slate-900">
-                            {customer.customerName}
-                          </td>
-
-                          {/* Phone Number */}
-                          <td className="py-3 px-6 font-mono text-slate-600">
-                            {customer.phoneNumber}
-                          </td>
-
-                          {/* Address */}
-                          <td className="py-3 px-6 max-w-[200px] truncate text-slate-500" title={customer.address}>
-                            {customer.address}
-                          </td>
-
-                          {/* Product */}
+                          {/* Customer Details */}
                           <td className="py-3 px-6">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-100 text-slate-700 text-xs font-semibold rounded-lg">
-                              <Laptop className="h-3 w-3 text-slate-400" />
-                              {customer.productPurchased}
-                            </span>
+                            <div className="font-semibold text-slate-900">{customer.customerName}</div>
+                            <div className="text-xs text-slate-500 font-mono mt-0.5">{customer.phoneNumber}</div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[200px]" title={customer.address}>
+                              {customer.address}
+                            </div>
                           </td>
 
-                          {/* Price */}
-                          <td className="py-3 px-6 font-bold text-slate-900">
-                            {formatCurrency(customer.purchasePrice)}
+                          {/* Product & Price */}
+                          <td className="py-3 px-6">
+                            <div className="space-y-3">
+                              {getCustomerPurchases(customer).map((purchase) => (
+                                <div key={purchase.id} className="flex items-center gap-1.5 h-6">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-50 border border-slate-100 text-slate-700 text-[11px] font-semibold rounded-md">
+                                    <Laptop className="h-3 w-3 text-slate-400" />
+                                    {purchase.productPurchased}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-900">
+                                    {formatCurrency(purchase.purchasePrice)}
+                                  </span>
+                                  <button
+                                    onClick={() => handleViewPurchaseInvoice(customer, purchase)}
+                                    className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-all"
+                                    title="Invoice for this purchase"
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+
+                          {/* Warranty Status */}
+                          <td className="py-3 px-6">
+                            <div className="space-y-3">
+                              {getCustomerPurchases(customer).map((purchase) => {
+                                const wInfo = getWarrantyStatus(purchase);
+                                return (
+                                  <div key={purchase.id} className="h-6 flex items-center">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold border ${wInfo.colorClass}`}>
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                      <span>{wInfo.label}</span>
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+
+                          {/* Payment & Dues */}
+                          <td className="py-3 px-6">
+                            <div className="space-y-3">
+                              {getCustomerPurchases(customer).map((purchase) => {
+                                const status = purchase.paymentStatus ?? 'paid';
+                                const total = purchase.purchasePrice;
+                                const paid = purchase.amountPaid ?? total;
+                                const due = Math.max(0, total - paid);
+                                
+                                return (
+                                  <div key={purchase.id} className="h-6 flex items-center">
+                                    {status === 'paid' ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                        Fully Paid
+                                      </span>
+                                    ) : status === 'pending' ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
+                                          Pending
+                                        </span>
+                                        <span className="text-[10px] text-amber-600 font-bold">Due: {formatCurrency(due)}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                                          EMI
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-medium">
+                                          Paid: {formatCurrency(paid)}/{formatCurrency(total)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </td>
 
                           {/* Purchase Date */}
                           <td className="py-3 px-6 text-slate-500 whitespace-nowrap">
-                            {formatDateStr(customer.purchaseDate)}
+                            <div className="space-y-3">
+                              {getCustomerPurchases(customer).map((purchase) => (
+                                <div key={purchase.id} className="h-6 flex items-center text-xs font-medium font-mono">
+                                  {formatDateStr(purchase.purchaseDate)}
+                                </div>
+                              ))}
+                            </div>
                           </td>
 
                           {/* Row Actions */}
@@ -814,6 +1118,16 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                 title="Open WhatsApp Message"
                               >
                                 <Phone className="h-4.5 w-4.5" />
+                              </button>
+
+                              {/* Invoice / Cash Memo Action */}
+                              <button
+                                onClick={() => setInvoiceCustomer(customer)}
+                                className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100"
+                                id={`invoice-row-btn-${customer.id}`}
+                                title="Generate Invoice Cash Memo"
+                              >
+                                <FileText className="h-4.5 w-4.5" />
                               </button>
 
                               {/* Edit Action */}
@@ -848,10 +1162,12 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               <div className="block md:hidden divide-y divide-slate-100" id="mobile-cards-container">
                 {paginatedCustomers.map((customer) => {
                   const isSelected = selectedIds.has(customer.id);
+                  const purchases = getCustomerPurchases(customer);
+
                   return (
                     <div
                       key={customer.id}
-                      className={`p-4 space-y-4 transition-colors ${
+                      className={`p-4 space-y-3.5 transition-colors ${
                         isSelected ? 'bg-indigo-50/20' : 'bg-white'
                       }`}
                       id={`mobile-card-${customer.id}`}
@@ -879,68 +1195,120 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                           </div>
                         </div>
 
-                        {/* Price Badge */}
-                        <span className="text-sm font-extrabold text-slate-900 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
-                          {formatCurrency(customer.purchasePrice)}
+                        {/* Total Sales sum badge */}
+                        <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                          Total Purchases: {purchases.length}
                         </span>
                       </div>
 
-                      {/* Info lines */}
-                      <div className="grid grid-cols-1 gap-2 text-xs text-slate-500 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                        <div className="flex items-start gap-1.5">
-                          <Laptop className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-medium text-slate-400">Product: </span>
-                            <span className="font-semibold text-slate-700">{customer.productPurchased}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-1.5">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-medium text-slate-400">Address: </span>
-                            <span className="text-slate-700">{customer.address}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-1.5">
-                          <CalendarDays className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-medium text-slate-400">Date: </span>
-                            <span className="text-slate-700">{formatDateStr(customer.purchaseDate)}</span>
-                          </div>
+                      {/* General Address */}
+                      <div className="flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50/50 px-3 py-2 rounded-lg border border-slate-100">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-medium text-slate-400">Address: </span>
+                          <span className="text-slate-700 font-medium">{customer.address}</span>
                         </div>
                       </div>
 
+                      {/* Purchases list */}
+                      <div className="space-y-2.5">
+                        {purchases.map((purchase, index) => {
+                          const wInfoMob = getWarrantyStatus(purchase);
+                          const statusMob = purchase.paymentStatus ?? 'paid';
+                          const totalMob = purchase.purchasePrice;
+                          const paidMob = purchase.amountPaid ?? totalMob;
+                          const dueMob = Math.max(0, totalMob - paidMob);
+
+                          return (
+                            <div key={purchase.id} className="p-3 bg-slate-50/20 border border-slate-100 rounded-xl space-y-2 relative">
+                              {purchases.length > 1 && (
+                                <span className="absolute top-0 right-3 -translate-y-1/2 bg-indigo-600 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                  Purchase #{index + 1}
+                                </span>
+                              )}
+
+                              <div className="flex items-start justify-between gap-2 pt-0.5">
+                                <div className="flex items-start gap-1.5">
+                                  <Laptop className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-semibold text-slate-800 text-xs">{purchase.productPurchased}</span>
+                                    <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                                      {formatDateStr(purchase.purchaseDate)}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-xs font-extrabold text-indigo-600">
+                                    {formatCurrency(totalMob)}
+                                  </div>
+                                  <button
+                                    onClick={() => handleViewPurchaseInvoice(customer, purchase)}
+                                    className="inline-flex items-center gap-0.5 text-[10px] text-indigo-600 font-bold hover:underline mt-1"
+                                  >
+                                    <FileText className="h-2.5 w-2.5" />
+                                    <span>Invoice</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${wInfoMob.colorClass}`}>
+                                  <ShieldCheck className="h-2.5 w-2.5" />
+                                  <span>{wInfoMob.label}</span>
+                                </span>
+
+                                {statusMob === 'paid' ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                    Fully Paid
+                                  </span>
+                                ) : statusMob === 'pending' ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-100">
+                                    Due: {formatCurrency(dueMob)}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                                    EMI Paid: {formatCurrency(paidMob)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
                       {/* Card Actions Footer */}
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        {/* Quick WhatsApp Action */}
-                        <button
-                          onClick={() => triggerWhatsApp(customer)}
-                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-xl transition-all"
-                          id={`whatsapp-mob-btn-${customer.id}`}
-                        >
-                          <Phone className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </button>
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100/60">
+                        <div className="flex items-center gap-1.5">
+                          {/* Quick WhatsApp Action */}
+                          <button
+                            onClick={() => triggerWhatsApp(customer)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 rounded-lg transition-all"
+                            id={`whatsapp-mob-btn-${customer.id}`}
+                          >
+                            <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </button>
+                        </div>
 
                         <div className="flex items-center gap-1">
                           {/* Edit */}
                           <button
                             onClick={() => handleEditClick(customer)}
-                            className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border border-slate-100 rounded-xl transition-all"
+                            className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 border border-slate-100 rounded-lg transition-all"
                             id={`edit-mob-btn-${customer.id}`}
                             aria-label="Edit customer record"
                           >
-                            <Edit3 className="h-4.5 w-4.5" />
+                            <Edit3 className="h-4 w-4" />
                           </button>
                           
                           {/* Delete */}
                           <button
                             onClick={() => handleDeleteClick(customer)}
-                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 border border-slate-100 rounded-xl transition-all"
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 border border-slate-100 rounded-lg transition-all"
                             id={`delete-mob-btn-${customer.id}`}
                             aria-label="Delete customer record"
                           >
-                            <Trash2 className="h-4.5 w-4.5" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
@@ -1158,6 +1526,121 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* 11. Modal: Duplicate Customer Phone Number Warning Dialog */}
+      <AnimatePresence>
+        {duplicateCheckData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" id="duplicate-warning-overlay">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl w-full max-w-lg border border-slate-100 shadow-2xl overflow-hidden z-10 my-auto"
+              id="duplicate-warning-modal"
+            >
+              <div className="h-2 bg-amber-500 w-full" />
+              
+              <div className="p-6 sm:p-8 space-y-6">
+                {/* Header */}
+                <div className="text-center space-y-3">
+                  <div className="inline-flex items-center justify-center p-3 bg-amber-50 rounded-2xl text-amber-600 mb-1">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Duplicate Phone Number Detected
+                  </h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    This phone number already belongs to an existing customer in Sethi Electronics database.
+                  </p>
+                </div>
+
+                {/* Existing Customer Summary Card */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-sm">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="font-semibold text-slate-500 text-xs uppercase tracking-wider">Existing Record</span>
+                    <span className="font-mono text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-bold font-mono">
+                      {duplicateCheckData.existingCustomer.phoneNumber}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-y-2 gap-x-4 pt-1">
+                    <div>
+                      <span className="block text-slate-400 text-xs">Customer Name</span>
+                      <span className="font-semibold text-slate-800">{duplicateCheckData.existingCustomer.customerName}</span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400 text-xs">Address</span>
+                      <span className="text-slate-700 font-medium truncate block" title={duplicateCheckData.existingCustomer.address}>
+                        {duplicateCheckData.existingCustomer.address}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Options Description */}
+                <div className="space-y-3 pt-1">
+                  {/* Option 2: Add purchase to existing customer */}
+                  <button
+                    onClick={handleConfirmAddPurchase}
+                    className="w-full flex items-center gap-3.5 p-3.5 bg-indigo-50 border border-indigo-100 text-indigo-900 hover:bg-indigo-100/70 transition-all rounded-xl text-left cursor-pointer group"
+                    id="duplicate-add-purchase-btn"
+                  >
+                    <span className="p-2 bg-white text-indigo-600 rounded-lg shadow-sm border border-indigo-50 shrink-0">
+                      <PlusCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </span>
+                    <div>
+                      <span className="block font-bold text-sm text-indigo-950">Add Purchase To Existing Customer</span>
+                      <span className="block text-xs text-indigo-600 font-medium mt-0.5">
+                        Append {duplicateCheckData.newPurchaseInput.productPurchased} ({formatCurrency(Number(duplicateCheckData.newPurchaseInput.purchasePrice))}) to this customer's record.
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Option 1: View existing customer */}
+                  <button
+                    onClick={() => {
+                      const cust = duplicateCheckData.existingCustomer;
+                      setDuplicateCheckData(null);
+                      // Clear search / set search to phone so they are filtered and visible
+                      setSearchTerm(cust.phoneNumber);
+                      // Trigger Edit click for existing customer
+                      handleEditClick(cust);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3.5 bg-slate-50 border border-slate-200 hover:bg-slate-100/80 transition-all rounded-xl text-left cursor-pointer group"
+                    id="duplicate-view-existing-btn"
+                  >
+                    <span className="p-2 bg-white text-slate-600 rounded-lg shadow-sm border border-slate-100 shrink-0">
+                      <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    </span>
+                    <div>
+                      <span className="block font-bold text-sm text-slate-900">View Existing Customer Details</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Cancel adding new purchase and inspect existing customer profile and full history.
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Cancel / Back to Edit Number */}
+                <div className="flex justify-end pt-2">
+                  <button
+                    onClick={() => setDuplicateCheckData(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    Go Back & Edit Phone Number
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 10. Modal: Customer Printable Invoice Cash Memo */}
+      <InvoiceModal
+        isOpen={invoiceCustomer !== null}
+        onClose={() => setInvoiceCustomer(null)}
+        customer={invoiceCustomer}
+      />
     </div>
   );
 }

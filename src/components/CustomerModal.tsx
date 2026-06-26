@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Phone, MapPin, Laptop, DollarSign, Calendar, Save } from 'lucide-react';
+import { X, User, Phone, MapPin, Laptop, DollarSign, Calendar, Save, ShieldCheck, CreditCard } from 'lucide-react';
 import { Customer, CustomerInput } from '../types';
 
 interface CustomerModalProps {
@@ -18,6 +18,9 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
     productPurchased: '',
     purchasePrice: '',
     purchaseDate: '',
+    warrantyMonths: '12',
+    paymentStatus: 'paid',
+    amountPaid: '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
@@ -42,6 +45,9 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
         productPurchased: customer.productPurchased,
         purchasePrice: customer.purchasePrice.toString(),
         purchaseDate: dateStr,
+        warrantyMonths: (customer.warrantyMonths ?? 12).toString(),
+        paymentStatus: customer.paymentStatus ?? 'paid',
+        amountPaid: (customer.amountPaid ?? customer.purchasePrice).toString(),
       });
     } else {
       // Reset form when adding
@@ -52,6 +58,9 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
         productPurchased: '',
         purchasePrice: '',
         purchaseDate: new Date().toISOString().split('T')[0], // Default to today
+        warrantyMonths: '12',
+        paymentStatus: 'paid',
+        amountPaid: '',
       });
     }
     setErrors({});
@@ -88,11 +97,22 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
       newErrors.purchaseDate = 'Purchase date is required';
     }
 
+    if (formData.paymentStatus !== 'paid') {
+      const amtPaid = formData.amountPaid.trim();
+      if (!amtPaid) {
+        newErrors.amountPaid = 'Amount paid is required';
+      } else if (isNaN(Number(amtPaid)) || Number(amtPaid) < 0) {
+        newErrors.amountPaid = 'Amount paid must be a valid positive number';
+      } else if (Number(amtPaid) > Number(formData.purchasePrice)) {
+        newErrors.amountPaid = 'Amount paid cannot exceed purchase price';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
     // For phone number, if user types non-digits, we can prevent it, or just let them type and validate
@@ -100,7 +120,14 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
       const digitsOnly = value.replace(/\D/g, '');
       setFormData(prev => ({ ...prev, [name]: digitsOnly }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData(prev => {
+        const nextState = { ...prev, [name]: value };
+        // If payment status is updated to "paid", automatically set amountPaid to match purchasePrice
+        if (name === 'paymentStatus' && value === 'paid') {
+          nextState.amountPaid = nextState.purchasePrice;
+        }
+        return nextState;
+      });
     }
 
     // Clear error for this field
@@ -329,6 +356,100 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                       )}
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Warranty Period */}
+                    <div>
+                      <label htmlFor="warrantyMonths" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Warranty Period <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative rounded-xl shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <ShieldCheck className="h-5 w-5 text-slate-400" />
+                        </div>
+                        <select
+                          name="warrantyMonths"
+                          id="warrantyMonths"
+                          value={formData.warrantyMonths}
+                          onChange={handleChange}
+                          className="block w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
+                        >
+                          <option value="0">No Warranty (0 mo)</option>
+                          <option value="6">6 Months</option>
+                          <option value="12">1 Year (12 mo)</option>
+                          <option value="24">2 Years (24 mo)</option>
+                          <option value="36">3 Years (36 mo)</option>
+                          <option value="60">5 Years (60 mo)</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Payment Status */}
+                    <div>
+                      <label htmlFor="paymentStatus" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Payment Status <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative rounded-xl shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <CreditCard className="h-5 w-5 text-slate-400" />
+                        </div>
+                        <select
+                          name="paymentStatus"
+                          id="paymentStatus"
+                          value={formData.paymentStatus}
+                          onChange={handleChange}
+                          className="block w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm appearance-none"
+                        >
+                          <option value="paid">Fully Paid</option>
+                          <option value="pending">Due / Pending</option>
+                          <option value="emi">Installment / EMI</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Amount Paid (Conditional) */}
+                  {formData.paymentStatus !== 'paid' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Amount Paid so far (₹) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative rounded-xl shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <DollarSign className="h-5 w-5 text-slate-400" />
+                        </div>
+                        <input
+                          type="text"
+                          name="amountPaid"
+                          id="amountPaid"
+                          value={formData.amountPaid}
+                          onChange={handleChange}
+                          placeholder="e.g. 10000"
+                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                            errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
+                          }`}
+                        />
+                      </div>
+                      {errors.amountPaid && (
+                        <p className="text-xs text-red-500 mt-1" id="error-amountPaid">{errors.amountPaid}</p>
+                      )}
+                    </motion.div>
+                  )}
 
                   {/* Form Footer Buttons */}
                   <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
