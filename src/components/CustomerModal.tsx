@@ -99,12 +99,13 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
     if (formData.paymentStatus !== 'paid') {
       const amtPaid = formData.amountPaid.trim();
+      const fieldLabel = formData.paymentStatus === 'emi' ? 'Downpayment (DP) amount' : 'Amount paid';
       if (!amtPaid) {
-        newErrors.amountPaid = 'Amount paid is required';
+        newErrors.amountPaid = `${fieldLabel} is required`;
       } else if (isNaN(Number(amtPaid)) || Number(amtPaid) < 0) {
-        newErrors.amountPaid = 'Amount paid must be a valid positive number';
+        newErrors.amountPaid = `${fieldLabel} must be a valid positive number`;
       } else if (Number(amtPaid) > Number(formData.purchasePrice)) {
-        newErrors.amountPaid = 'Amount paid cannot exceed purchase price';
+        newErrors.amountPaid = `${fieldLabel} cannot exceed purchase price`;
       }
     }
 
@@ -427,7 +428,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                       className="overflow-hidden"
                     >
                       <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-                        Amount Paid so far (₹) <span className="text-red-500">*</span>
+                        {formData.paymentStatus === 'emi' ? 'Downpayment (DP) Amount (₹)' : 'Amount Paid so far (₹)'} <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-xl shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -439,7 +440,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                           id="amountPaid"
                           value={formData.amountPaid}
                           onChange={handleChange}
-                          placeholder="e.g. 10000"
+                          placeholder={formData.paymentStatus === 'emi' ? 'e.g. 5000 (Downpayment)' : 'e.g. 10000'}
                           className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
                             errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200'
                           }`}

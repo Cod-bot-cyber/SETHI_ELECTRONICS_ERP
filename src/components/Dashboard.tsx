@@ -95,6 +95,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
   // Broadcast Modal state
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+  const [sentBroadcastIds, setSentBroadcastIds] = useState<Set<string>>(new Set());
   const [broadcastTemplate, setBroadcastTemplate] = useState(
     "Hello {{CustomerName}},\n\nThank you for purchasing {{ProductPurchased}} from Sethi Electronics.\n\nWe appreciate your support!"
   );
@@ -501,42 +502,59 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // Generate WhatsApp business JSON preview payload
-  const broadcastPayload = useMemo(() => {
+  const handleOpenBroadcast = () => {
+    setSentBroadcastIds(new Set());
+    setIsBroadcastOpen(true);
+  };
+
+  const handleSendSingleBroadcast = (customer: Customer) => {
+    const parsedMessage = broadcastTemplate
+      .replace(/\{\{CustomerName\}\}/g, customer.customerName)
+      .replace(/\{\{ProductPurchased\}\}/g, customer.productPurchased);
+    
+    const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
+    const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(parsedMessage)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    
+    setSentBroadcastIds(prev => {
+      const next = new Set(prev);
+      next.add(customer.id);
+      return next;
+    });
+  };
+
+  const handleSendAllBroadcast = () => {
     const selectedCustomers = customers.filter(c => selectedIds.has(c.id));
-    return {
-      template: {
-        name: "sethi_electronics_thankyou",
-        language: { code: "en_US" }
-      },
-      recipients: selectedCustomers.map(c => {
-        // Simple template message merge
-        let parsedMessage = broadcastTemplate
-          .replace(/\{\{CustomerName\}\}/g, c.customerName)
-          .replace(/\{\{ProductPurchased\}\}/g, c.productPurchased);
+    if (selectedCustomers.length === 0) return;
 
-        return {
-          customerName: c.customerName,
-          phoneNumber: c.phoneNumber.startsWith('91') || c.phoneNumber.length > 10 ? c.phoneNumber : `91${c.phoneNumber}`,
-          parameters: [
-            { type: "text", text: c.customerName },
-            { type: "text", text: c.productPurchased }
-          ],
-          customPreviewMessage: parsedMessage
-        };
-      })
-    };
-  }, [customers, selectedIds, broadcastTemplate]);
-
-  // Bulk simulation
-  const handleRunBroadcastSimulation = () => {
     setIsSimulatingBroadcast(true);
-    setTimeout(() => {
-      setIsSimulatingBroadcast(false);
-      setIsBroadcastOpen(false);
-      setSelectedIds(new Set());
-      onAddToast(`Broadcast simulation complete! Prepared ${selectedIds.size} WhatsApp Cloud API payloads.`, 'success');
-    }, 1800);
+    
+    selectedCustomers.forEach((customer, idx) => {
+      setTimeout(() => {
+        const parsedMessage = broadcastTemplate
+          .replace(/\{\{CustomerName\}\}/g, customer.customerName)
+          .replace(/\{\{ProductPurchased\}\}/g, customer.productPurchased);
+        
+        const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
+        const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(parsedMessage)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+
+        setSentBroadcastIds(prev => {
+          const next = new Set(prev);
+          next.add(customer.id);
+          return next;
+        });
+
+        if (idx === selectedCustomers.length - 1) {
+          setIsSimulatingBroadcast(false);
+          setSelectedIds(new Set());
+          setIsBroadcastOpen(false);
+          onAddToast(`Opened WhatsApp chat tabs for all ${selectedCustomers.length} selected customers successfully!`, 'success');
+        }
+      }, idx * 1000);
+    });
   };
 
   return (
@@ -893,7 +911,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                   Deselect All
                 </button>
                 <button
-                  onClick={() => setIsBroadcastOpen(true)}
+                  onClick={handleOpenBroadcast}
                   className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold bg-white text-indigo-700 hover:bg-indigo-50 rounded-xl shadow-sm transition-all shrink-0"
                   id="send-broadcast-btn"
                 >
@@ -1085,8 +1103,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
                                           EMI
                                         </span>
-                                        <span className="text-[10px] text-slate-500 font-medium">
-                                          Paid: {formatCurrency(paid)}/{formatCurrency(total)}
+                                        <span className="text-[10px] text-slate-500 font-medium font-mono">
+                                          DP: {formatCurrency(paid)}/{formatCurrency(total)}
                                         </span>
                                       </div>
                                     )}
@@ -1266,8 +1284,8 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                     Due: {formatCurrency(dueMob)}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
-                                    EMI Paid: {formatCurrency(paidMob)}
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 font-mono">
+                                    EMI DP: {formatCurrency(paidMob)}
                                   </span>
                                 )}
                               </div>
@@ -1411,7 +1429,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         isDeleting={isDeleting}
       />
 
-      {/* 9. Modal: Mass WhatsApp Broadcast Integration Preparation Preview */}
+      {/* 9. Modal: Mass WhatsApp Broadcast Sender Assistant */}
       <AnimatePresence>
         {isBroadcastOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-slate-900/40 backdrop-blur-sm" id="broadcast-modal-overlay">
@@ -1419,7 +1437,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl w-full max-w-2xl border border-slate-100 shadow-xl overflow-hidden z-10 my-auto"
+              className="bg-white rounded-2xl w-full max-w-3xl border border-slate-100 shadow-xl overflow-hidden z-10 my-auto"
               id="broadcast-modal-content"
             >
               <div className="h-2 bg-emerald-500 w-full" />
@@ -1432,10 +1450,10 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                       <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
                         <Send className="w-5 h-5" />
                       </span>
-                      WhatsApp Broadcast Prep
+                      WhatsApp Broadcast Assistant
                     </h3>
                     <p className="text-sm text-slate-500 mt-1">
-                      Prepares bulk payload for standard WhatsApp Business Cloud API integration.
+                      Directly initiate WhatsApp chat messages for selected customers with your customized template.
                     </p>
                   </div>
                   <button
@@ -1447,77 +1465,128 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left Column: Template Editor */}
+                  {/* Left Column: Template Editor & Message Preview */}
                   <div className="space-y-4">
                     <div>
-                      <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Selected Recipients
-                      </span>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 max-h-40 overflow-y-auto space-y-1.5">
-                        {customers.filter(c => selectedIds.has(c.id)).map(c => (
-                          <div key={c.id} className="flex justify-between items-center text-xs font-medium text-slate-700 bg-white p-2 rounded-lg shadow-xs border border-slate-100">
-                            <span>{c.customerName}</span>
-                            <span className="text-slate-400 font-mono">{c.phoneNumber}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Message Template Body
+                        Customize Message Template
                       </label>
                       <textarea
                         rows={4}
                         value={broadcastTemplate}
                         onChange={(e) => setBroadcastTemplate(e.target.value)}
-                        className="block w-full text-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 transition-all"
+                        className="block w-full text-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 transition-all font-sans"
                         placeholder="Type broadcast message..."
                       />
                       <span className="text-[10px] text-slate-400 mt-1 block">
-                        Supported dynamic tags: <code className="font-semibold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{"{{CustomerName}}"}</code>, <code className="font-semibold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{"{{ProductPurchased}}"}</code>.
+                        Dynamic tags: <code className="font-semibold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{"{{CustomerName}}"}</code>, <code className="font-semibold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{"{{ProductPurchased}}"}</code>.
                       </span>
+                    </div>
+
+                    {/* WhatsApp-Style Live Preview Bubble */}
+                    <div className="space-y-1.5">
+                      <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Live Message Preview
+                      </span>
+                      <div className="bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat p-4 rounded-xl border border-slate-200 min-h-[120px] flex items-end">
+                        <div className="bg-[#d9fdd3] text-slate-800 p-3 rounded-xl rounded-tr-none shadow-xs text-xs font-sans max-w-[90%] ml-auto relative">
+                          <span className="whitespace-pre-wrap block">
+                            {(() => {
+                              const firstSelected = customers.find(c => selectedIds.has(c.id));
+                              const name = firstSelected?.customerName || 'Customer Name';
+                              const product = firstSelected?.productPurchased || 'Product Name';
+                              return broadcastTemplate
+                                .replace(/\{\{CustomerName\}\}/g, name)
+                                .replace(/\{\{ProductPurchased\}\}/g, product);
+                            })()}
+                          </span>
+                          <span className="text-[9px] text-emerald-600 font-medium float-right mt-1 font-mono">
+                            12:00 PM ✓✓
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Column: API Payload Output Preview */}
+                  {/* Right Column: Selected Recipients Queue */}
                   <div className="space-y-4 flex flex-col justify-between">
                     <div>
-                      <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                        <FileJson className="w-4 h-4 text-slate-400" />
-                        API Integration Payload
-                      </span>
-                      <pre className="bg-slate-950 text-emerald-400 p-4 rounded-xl text-[11px] font-mono overflow-auto max-h-64 border border-slate-800">
-                        {JSON.stringify(broadcastPayload, null, 2)}
-                      </pre>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          Recipients Queue ({customers.filter(c => selectedIds.has(c.id)).length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {sentBroadcastIds.size} of {selectedIds.size} Sent
+                        </span>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 max-h-64 overflow-y-auto space-y-2">
+                        {customers.filter(c => selectedIds.has(c.id)).map(c => {
+                          const isSent = sentBroadcastIds.has(c.id);
+                          return (
+                            <div key={c.id} className="flex justify-between items-center bg-white p-2.5 rounded-xl shadow-xs border border-slate-100 text-xs">
+                              <div className="space-y-0.5 max-w-[60%]">
+                                <span className="font-bold text-slate-800 block truncate">{c.customerName}</span>
+                                <span className="text-slate-400 font-mono block">{c.phoneNumber}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {isSent ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                    ✓ Opened
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSendSingleBroadcast(c)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-all text-[10px] cursor-pointer"
+                                  >
+                                    Open Chat
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div className="flex gap-2 items-center justify-end">
+                    <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => setIsBroadcastOpen(false)}
-                        className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all"
-                      >
-                        Close
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleRunBroadcastSimulation}
+                        onClick={handleSendAllBroadcast}
                         disabled={isSimulatingBroadcast}
-                        className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/10 transition-all disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/10 transition-all disabled:opacity-50 cursor-pointer"
                       >
                         {isSimulatingBroadcast ? (
                           <>
                             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Sending...
+                            Opening Tabs sequentially...
                           </>
                         ) : (
                           <>
-                            <Send className="w-3.5 h-3.5" />
-                            Execute Simulation
+                            <Send className="w-4 h-4" />
+                            <span>Open Chats for All Selected ({selectedIds.size})</span>
                           </>
                         )}
                       </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSentBroadcastIds(new Set());
+                            onAddToast("Broadcast progress reset", "info");
+                          }}
+                          className="w-1/2 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer"
+                        >
+                          Reset Progress
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsBroadcastOpen(false)}
+                          className="w-1/2 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer"
+                        >
+                          Close
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

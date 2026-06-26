@@ -198,11 +198,6 @@ export default function InvoiceModal({ isOpen, onClose, customer }: InvoiceModal
                       </div>
 
                       <div className="flex items-center justify-between text-xs font-medium">
-                        <span className="text-slate-500">Warranty Expiry:</span>
-                        <span className="text-slate-800 font-semibold">{getWarrantyExpiry()}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs font-medium">
                         <span className="text-slate-500">Payment Status:</span>
                         {paymentStatus === 'paid' ? (
                           <span className="px-2 py-0.5 rounded-md text-emerald-700 bg-emerald-50 border border-emerald-100 font-bold uppercase text-[10px]">
@@ -266,7 +261,7 @@ export default function InvoiceModal({ isOpen, onClose, customer }: InvoiceModal
                     </div>
 
                     <div className="flex justify-between text-emerald-700 text-xs font-semibold pt-1">
-                      <span>Amount Paid:</span>
+                      <span>{paymentStatus === 'emi' ? 'Downpayment (DP) Paid:' : 'Amount Paid:'}</span>
                       <span className="font-mono">{formatCurrency(paidAmount)}</span>
                     </div>
 
