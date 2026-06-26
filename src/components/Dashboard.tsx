@@ -224,6 +224,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       paymentStatus: customer.paymentStatus ?? 'paid',
       amountPaid: customer.amountPaid ?? customer.purchasePrice,
       firstEmiDate: customer.firstEmiDate,
+      lastEmiReminderSentDate: customer.lastEmiReminderSentDate,
     }];
   };
 
@@ -276,13 +277,22 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         };
       }).filter(alert => {
         const key = `${alert.customer.id}_${alert.purchase.id}`;
-        return !sentEmiReminderIds.has(key) && alert.daysLeft !== null && alert.daysLeft <= 3 && alert.daysLeft >= 0;
+        
+        // Timezone-safe YYYY-MM-DD formatting
+        const d = alert.upcomingDate;
+        const alertDateKey = d 
+          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+          : (alert.purchase.firstEmiDate || '');
+
+        const alreadySent = alert.purchase.lastEmiReminderSentDate === alertDateKey;
+        
+        return !alreadySent && !sentEmiReminderIds.has(key) && alert.daysLeft !== null && alert.daysLeft <= 3 && alert.daysLeft >= 0;
       });
     });
   }, [customers, sentEmiReminderIds]);
 
   // Handle sending EMI reminder via WhatsApp
-  const sendEmiReminder = (customer: Customer, purchase: Purchase, daysLeft: number) => {
+  const sendEmiReminder = async (customer: Customer, purchase: Purchase, daysLeft: number) => {
     let dateStr = '';
     const { upcomingDate } = getUpcomingEmiDetails(purchase.firstEmiDate);
     if (upcomingDate) {
@@ -304,6 +314,38 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       next.add(`${customer.id}_${purchase.id}`);
       return next;
     });
+
+    // Also persist this to Firestore so it remains marked as sent across page reloads
+    try {
+      const d = upcomingDate;
+      const upcomingDateKey = d 
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        : (purchase.firstEmiDate || '');
+
+      const docRef = doc(db, 'customers', customer.id);
+      if (purchase.id === 'p_initial') {
+        // Backward-compatibility: update customer root level
+        await updateDoc(docRef, {
+          lastEmiReminderSentDate: upcomingDateKey
+        });
+      } else {
+        // Multi-purchase history: update specific purchase in purchaseHistory array
+        const history = customer.purchaseHistory ?? [];
+        const updatedHistory = history.map(p => {
+          if (p.id === purchase.id) {
+            return { ...p, lastEmiReminderSentDate: upcomingDateKey };
+          }
+          return p;
+        });
+        await updateDoc(docRef, {
+          purchaseHistory: updatedHistory
+        });
+      }
+      onAddToast(`Logged EMI reminder for ${customer.customerName} in database.`, 'success');
+    } catch (error) {
+      console.error('Failed to persist EMI reminder:', error);
+      handleFirestoreError(error, OperationType.UPDATE, `customers/${customer.id}`);
+    }
   };
 
   // Trigger toast alert once on load if any customer EMI is 3 days or less away

@@ -7,6 +7,7 @@ export interface Purchase {
   paymentStatus?: 'paid' | 'pending' | 'emi';
   amountPaid?: number;
   firstEmiDate?: string; // "YYYY-MM-DD"
+  lastEmiReminderSentDate?: string; // "YYYY-MM-DD" of last installment reminded
 }
 
 export interface Customer {
@@ -23,6 +24,7 @@ export interface Customer {
   amountPaid?: number; // Amount paid so far
   purchaseHistory?: Purchase[];
   firstEmiDate?: string; // "YYYY-MM-DD"
+  lastEmiReminderSentDate?: string; // "YYYY-MM-DD" of last installment reminded
 }
 
 export interface CustomerInput {
