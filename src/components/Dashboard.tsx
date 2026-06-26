@@ -29,7 +29,12 @@ import {
   PlusCircle,
   Sun,
   Moon,
-  CheckCircle2
+  CheckCircle2,
+  Lock,
+  Unlock,
+  Fingerprint,
+  WifiOff,
+  Wifi
 } from 'lucide-react';
 import {
   collection,
@@ -83,6 +88,10 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     return saved === 'dark';
   });
 
+  // Entry Gateway lock states
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [authStatus, setAuthStatus] = useState<'idle' | 'authenticating' | 'success'>('idle');
+
   // Apply class on load and state change
   useEffect(() => {
     if (isDarkMode) {
@@ -93,6 +102,44 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  // Online/Offline status tracking
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSimulatedOffline, setIsSimulatedOffline] = useState(false);
+  const [showOnlineToast, setShowOnlineToast] = useState(false);
+
+  const activeOnline = isOnline && !isSimulatedOffline;
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setShowOnlineToast(true);
+      onAddToast('Internet connection restored!', 'success');
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      onAddToast('Internet connection lost. You are now offline.', 'error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Automatically fade out the restored online toast after 4 seconds
+  useEffect(() => {
+    if (showOnlineToast) {
+      const timer = setTimeout(() => {
+        setShowOnlineToast(false);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [showOnlineToast]);
 
   // Selected customer IDs (multiple selection)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -568,8 +615,188 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     });
   };
 
+  const handleAuthenticate = () => {
+    if (authStatus !== 'idle') return;
+    setAuthStatus('authenticating');
+    onAddToast('Establishing secure portal connection...', 'info');
+    setTimeout(() => {
+      setAuthStatus('success');
+      onAddToast('Access granted! Unlocking administrative portal...', 'success');
+      setTimeout(() => {
+        setIsUnlocked(true);
+      }, 700);
+    }, 1500);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] flex flex-col font-sans text-slate-800 dark:text-slate-100" id="admin-dashboard">
+    <>
+      {/* 11. Gateway Authentication Portal */}
+      <AnimatePresence>
+        {!isUnlocked && (
+          <motion.div
+            key="auth-gateway"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.8, ease: 'easeInOut' } }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-slate-950/65 dark:bg-black/85"
+            id="auth-gateway-overlay"
+          >
+            {/* 12. Liquid Glass Lava Lamp Background Blobs */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" id="liquid-glass-background">
+              {/* Blob 1: Vibrant Indigo */}
+              <div className="absolute top-[-10%] left-[-10%] sm:top-[5%] sm:left-[10%] w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] bg-indigo-600/35 dark:bg-indigo-500/25 rounded-full blur-3xl animate-liquid-1" />
+              {/* Blob 2: Vibrant Purple/Fuchsia */}
+              <div className="absolute bottom-[-10%] right-[-10%] sm:bottom-[5%] sm:right-[10%] w-[350px] h-[350px] sm:w-[550px] sm:h-[550px] bg-purple-500/25 dark:bg-fuchsia-500/20 rounded-full blur-3xl animate-liquid-2" />
+              {/* Blob 3: Vibrant Teal/Cyan */}
+              <div className="absolute top-[30%] left-[25%] sm:top-[30%] sm:left-[35%] w-[260px] h-[260px] sm:w-[420px] sm:h-[420px] bg-cyan-400/20 dark:bg-teal-500/15 rounded-full blur-3xl animate-liquid-3" />
+            </div>
+
+            {/* Intense Frost/Glass Diffusion Sheet */}
+            <div className="absolute inset-0 bg-slate-950/10 dark:bg-black/20 backdrop-blur-[80px] sm:backdrop-blur-[130px] z-10 pointer-events-none" />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -15, transition: { duration: 0.6 } }}
+              className="w-full max-w-md bg-white/70 dark:bg-slate-900/65 backdrop-blur-3xl border border-white/30 dark:border-slate-800/60 rounded-[32px] p-8 sm:p-10 shadow-2xl flex flex-col items-center text-center relative overflow-hidden z-20"
+              id="auth-gateway-card"
+            >
+              {/* Ambient Glow Orbs */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/15 dark:bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-violet-500/15 dark:bg-violet-500/20 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Logo Brand Icon */}
+              <div className="mb-6 relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-600/30 font-sans font-black text-xl tracking-tighter" id="gateway-logo">
+                <span className="relative z-10">SE</span>
+                <div className="absolute inset-0 rounded-2xl bg-indigo-500/50 blur-md opacity-50 animate-pulse" />
+              </div>
+
+              {/* Title & Description */}
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight" id="gateway-title">
+                Sethi Electronics
+              </h2>
+              <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tracking-widest uppercase mt-1">
+                Enterprise ERP Access
+              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 max-w-xs leading-relaxed">
+                Welcome to the secure administrative portal. Please complete the quick verification to unlock operations.
+              </p>
+
+              {/* Visual Interactive Touch Pad / Fingerprint */}
+              <div className="my-8 relative flex items-center justify-center">
+                {/* Pulsing ring behind */}
+                <div className={`absolute inset-0 rounded-full blur-xl opacity-60 transition-all duration-500 ${
+                  authStatus === 'success' ? 'bg-emerald-500/30' : authStatus === 'authenticating' ? 'bg-indigo-500/30 animate-pulse' : 'bg-indigo-500/10'
+                }`} />
+
+                <button
+                  type="button"
+                  onClick={handleAuthenticate}
+                  disabled={authStatus !== 'idle'}
+                  className={`relative w-28 h-28 flex items-center justify-center rounded-full border transition-all duration-500 focus:outline-none cursor-pointer ${
+                    authStatus === 'success'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500 shadow-md shadow-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : authStatus === 'authenticating'
+                      ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500/50 text-indigo-500'
+                      : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-850 hover:border-indigo-400 dark:hover:border-indigo-500 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 shadow-inner'
+                  }`}
+                  id="fingerprint-scan-pad"
+                  aria-label="Tap to authenticate"
+                >
+                  {/* Rotating Ring on Authenticating */}
+                  {authStatus === 'authenticating' && (
+                    <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="46"
+                        className="stroke-slate-100 dark:stroke-slate-850 fill-none"
+                        strokeWidth="3.5"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="46"
+                        className="stroke-indigo-600 fill-none animate-spin origin-center"
+                        strokeWidth="3.5"
+                        style={{
+                          transformOrigin: 'center',
+                          animationDuration: '1.4s',
+                          strokeDasharray: '289',
+                          strokeDashoffset: '120'
+                        }}
+                      />
+                    </svg>
+                  )}
+
+                  {/* Icon Switching based on Status */}
+                  <AnimatePresence mode="wait">
+                    {authStatus === 'idle' && (
+                      <motion.div
+                        key="lock-icon"
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Fingerprint className="w-11 h-11" />
+                      </motion.div>
+                    )}
+                    {authStatus === 'authenticating' && (
+                      <motion.div
+                        key="scanning-icon"
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="animate-pulse"
+                      >
+                        <Lock className="w-9 h-9 text-indigo-600 dark:text-indigo-400" />
+                      </motion.div>
+                    )}
+                    {authStatus === 'success' && (
+                      <motion.div
+                        key="success-icon"
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1.1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                      >
+                        <Unlock className="w-10 h-10 text-emerald-500" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </button>
+              </div>
+
+              {/* Action Trigger Button */}
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={handleAuthenticate}
+                disabled={authStatus !== 'idle'}
+                className={`w-full py-3.5 px-6 rounded-2xl text-sm font-bold tracking-wide shadow-md transition-all cursor-pointer ${
+                  authStatus === 'success'
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/10'
+                    : authStatus === 'authenticating'
+                    ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-900/30'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-600/15 active:bg-indigo-800'
+                }`}
+                id="auth-action-btn"
+              >
+                {authStatus === 'success' && 'Authenticated ✓'}
+                {authStatus === 'authenticating' && 'Verifying... Please hold'}
+                {authStatus === 'idle' && 'Unlock Portal Securely'}
+              </motion.button>
+
+              {/* Device Telemetry / Secure Signature */}
+              <div className="mt-6 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider uppercase">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>FIPS Compliant End-To-End</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className={`min-h-screen bg-slate-50 dark:bg-[#0b0f19] flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-all duration-[1000ms] ${!isUnlocked ? 'blur-md pointer-events-none select-none scale-[0.99]' : ''}`} id="admin-dashboard">
       
       {/* Top reflecting loading bar */}
       {loading && (
@@ -600,6 +827,35 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
             {/* User Meta & Dark Mode Toggle */}
             <div className="flex items-center gap-2 sm:gap-4">
+              {/* Simulate Offline Button */}
+              <button
+                onClick={() => {
+                  const targetState = !isSimulatedOffline;
+                  setIsSimulatedOffline(targetState);
+                  if (targetState) {
+                    onAddToast("Offline simulation started", "info");
+                  } else {
+                    onAddToast("Connected back online", "success");
+                  }
+                }}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  isSimulatedOffline
+                    ? 'bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/30'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 border-transparent dark:border-slate-800'
+                }`}
+                title={isSimulatedOffline ? "Simulating Offline: Click to connect online" : "Simulate Offline State for Testing"}
+                id="offline-simulate-toggle-btn"
+              >
+                {isSimulatedOffline ? (
+                  <WifiOff className="h-4.5 w-4.5 animate-pulse text-red-500" />
+                ) : (
+                  <Wifi className="h-4.5 w-4.5 text-indigo-500" />
+                )}
+                <span className="text-[9px] font-extrabold uppercase tracking-widest hidden md:inline-block">
+                  {isSimulatedOffline ? 'Sim Offline' : 'Test Offline'}
+                </span>
+              </button>
+
               {/* Dark Mode Toggle Button */}
               <button
                 onClick={() => setIsDarkMode(prev => !prev)}
@@ -1705,6 +1961,109 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* 12. Fancy Offline Interrupter Page */}
+      <AnimatePresence>
+        {!activeOnline && (
+          <motion.div
+            key="offline-gateway"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-slate-950/75 dark:bg-black/85 backdrop-blur-md"
+            id="offline-gateway-overlay"
+          >
+            {/* Ambient Animated Liquid Blobs */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" id="offline-liquid-bg">
+              <div className="absolute top-[-10%] left-[-10%] w-[320px] h-[320px] sm:w-[500px] sm:h-[500px] bg-red-600/25 dark:bg-red-500/15 rounded-full blur-3xl animate-liquid-1" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[320px] h-[320px] sm:w-[500px] sm:h-[500px] bg-amber-500/20 dark:bg-amber-500/10 rounded-full blur-3xl animate-liquid-2" />
+            </div>
+
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: -15 }}
+              className="w-full max-w-md bg-white/75 dark:bg-slate-900/70 backdrop-blur-3xl border border-red-200/50 dark:border-red-950/45 rounded-[32px] p-8 sm:p-10 shadow-2xl flex flex-col items-center text-center relative overflow-hidden z-10"
+              id="offline-card"
+            >
+              {/* Top Warning Ribbon */}
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-red-500 via-amber-500 to-red-500 animate-pulse" />
+
+              {/* Pulsing radar waves behind icon */}
+              <div className="mb-6 relative flex h-24 w-24 items-center justify-center" id="offline-radar-waves">
+                <div className="absolute inset-0 rounded-full bg-red-500/10 animate-ping" style={{ animationDuration: '3s' }} />
+                <div className="absolute inset-2 rounded-full bg-red-500/15 animate-ping" style={{ animationDuration: '2s' }} />
+                <div className="absolute inset-4 bg-red-500/10 rounded-full animate-pulse" />
+                <div className="relative z-10 h-14 w-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-amber-500 text-white shadow-lg shadow-red-500/25">
+                  <WifiOff className="w-7 h-7" />
+                </div>
+              </div>
+
+              {/* Offline Badge */}
+              <span className="px-3 py-1 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-[10px] font-extrabold rounded-full uppercase tracking-widest border border-red-100/55 dark:border-red-900/30">
+                Network Disconnected
+              </span>
+
+              {/* Text info */}
+              <h3 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-4" id="offline-title">
+                Sethi Electronics Offline Mode
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2.5 max-w-xs leading-relaxed">
+                Your internet connection was interrupted. We've securely locked operations to protect local transaction buffers.
+              </p>
+
+              {/* Listening radar status */}
+              <div className="my-6 p-3.5 bg-slate-50 dark:bg-slate-950/30 rounded-2xl border border-slate-100 dark:border-slate-800/80 w-full" id="offline-status-box">
+                <div className="flex items-center justify-center gap-2.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
+                    Listening for network signals...
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2.5 w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const online = navigator.onLine;
+                    setIsOnline(online);
+                    if (online) {
+                      onAddToast("Internet connection active! welcome back.", "success");
+                    } else {
+                      onAddToast("Still offline. Checking route tables...", "error");
+                    }
+                  }}
+                  className="w-full py-3 px-6 bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold tracking-widest uppercase rounded-2xl shadow-md shadow-red-600/10 cursor-pointer active:scale-98 transition-all flex items-center justify-center gap-1.5"
+                  id="offline-retry-btn"
+                >
+                  <Wifi className="w-4 h-4" />
+                  Check Active Signal
+                </button>
+
+                {isSimulatedOffline && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSimulatedOffline(false);
+                      onAddToast("Offline simulation stopped.", "success");
+                    }}
+                    className="w-full py-3 px-6 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-extrabold tracking-widest uppercase rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-800"
+                    id="offline-simulate-stop-btn"
+                  >
+                    Simulate Back Online
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+    </>
   );
 }
