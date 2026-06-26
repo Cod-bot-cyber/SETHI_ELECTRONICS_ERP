@@ -34,7 +34,8 @@ import {
   Unlock,
   Fingerprint,
   WifiOff,
-  Wifi
+  Wifi,
+  Bell
 } from 'lucide-react';
 import {
   collection,
@@ -88,6 +89,9 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
     return saved === 'dark';
   });
 
+  // EMI scheduled 3-days prior notifications popover toggle state
+  const [isEmiPopoverOpen, setIsEmiPopoverOpen] = useState(false);
+
   // Entry Gateway lock states
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [authStatus, setAuthStatus] = useState<'idle' | 'authenticating' | 'success'>('idle');
@@ -107,6 +111,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSimulatedOffline, setIsSimulatedOffline] = useState(false);
   const [showOnlineToast, setShowOnlineToast] = useState(false);
+  const [hasAlertedToday, setHasAlertedToday] = useState(false);
 
   const activeOnline = isOnline && !isSimulatedOffline;
 
@@ -206,8 +211,99 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       warrantyMonths: customer.warrantyMonths ?? 12,
       paymentStatus: customer.paymentStatus ?? 'paid',
       amountPaid: customer.amountPaid ?? customer.purchasePrice,
+      firstEmiDate: customer.firstEmiDate,
     }];
   };
+
+  // Helper to calculate upcoming EMI details
+  const getUpcomingEmiDetails = (firstEmiDateStr: string | undefined) => {
+    if (!firstEmiDateStr) return { upcomingDate: null, daysLeft: null };
+    try {
+      const [year, month, day] = firstEmiDateStr.split('-').map(Number);
+      if (!year || !month || !day) return { upcomingDate: null, daysLeft: null };
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const firstEmiDate = new Date(year, month - 1, day);
+      firstEmiDate.setHours(0, 0, 0, 0);
+      
+      let upcomingEmiDate = new Date(firstEmiDate);
+      if (upcomingEmiDate < today) {
+        let monthsToAdd = 1;
+        while (upcomingEmiDate < today) {
+          upcomingEmiDate = new Date(year, month - 1 + monthsToAdd, day);
+          upcomingEmiDate.setHours(0, 0, 0, 0);
+          monthsToAdd++;
+          if (monthsToAdd > 1200) break;
+        }
+      }
+      
+      const diffTime = upcomingEmiDate.getTime() - today.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      
+      return { upcomingDate: upcomingEmiDate, daysLeft: diffDays };
+    } catch (err) {
+      return { upcomingDate: null, daysLeft: null };
+    }
+  };
+
+  // Memoize all upcoming EMI alerts (due in 3 days or less)
+  const emiAlerts = useMemo(() => {
+    return customers.flatMap(customer => {
+      const purchases = getCustomerPurchases(customer);
+      const emiPurchases = purchases.filter(p => p.paymentStatus === 'emi' && p.firstEmiDate);
+      
+      return emiPurchases.map(purchase => {
+        const { upcomingDate, daysLeft } = getUpcomingEmiDetails(purchase.firstEmiDate);
+        return {
+          customer,
+          purchase,
+          upcomingDate,
+          daysLeft
+        };
+      }).filter(alert => alert.daysLeft !== null && alert.daysLeft <= 3 && alert.daysLeft >= 0);
+    });
+  }, [customers]);
+
+  // Handle sending EMI reminder via WhatsApp
+  const sendEmiReminder = (customer: Customer, purchase: Purchase, daysLeft: number) => {
+    let dateStr = '';
+    const { upcomingDate } = getUpcomingEmiDetails(purchase.firstEmiDate);
+    if (upcomingDate) {
+      dateStr = upcomingDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    } else if (purchase.firstEmiDate) {
+      dateStr = purchase.firstEmiDate;
+    }
+    
+    const totalAmount = purchase.purchasePrice;
+    const paidAmount = purchase.amountPaid ?? totalAmount;
+    const dueAmount = Math.max(0, totalAmount - paidAmount);
+    
+    const amountStr = dueAmount > 0 
+      ? `remaining balance of ₹${dueAmount.toLocaleString('en-IN')}`
+      : 'EMI installment';
+
+    const rawMsg = `Hello ${customer.customerName},\n\nThis is a friendly reminder from Sethi Electronics that your upcoming ${amountStr} for your ${purchase.productPurchased} purchase is due in ${daysLeft} days on ${dateStr}.\n\nPlease ensure the payment is made on or before the due date. Thank you!`;
+    
+    const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
+    const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(rawMsg)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Trigger toast alert once on load if any customer EMI is 3 days or less away
+  useEffect(() => {
+    if (customers.length > 0 && !hasAlertedToday) {
+      if (emiAlerts.length > 0) {
+        onAddToast(
+          `Alert: ${emiAlerts.length} customer(s) have EMI due in 3 days or less!`, 
+          'info'
+        );
+        setHasAlertedToday(true);
+      }
+    }
+  }, [customers, emiAlerts, hasAlertedToday, onAddToast]);
 
   const uniqueProducts = useMemo(() => {
     const products: string[] = [];
@@ -448,6 +544,12 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         amountPaid: input.paymentStatus === 'paid' ? priceVal : Number(input.amountPaid),
       };
 
+      if (input.paymentStatus === 'emi') {
+        payload.firstEmiDate = input.firstEmiDate;
+      } else {
+        payload.firstEmiDate = null;
+      }
+
       if (modalCustomer) {
         // EDIT Mode
         payload.createdAt = modalCustomer.createdAt; // Retain immutable createdAt
@@ -487,11 +589,15 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         amountPaid: newPurchaseInput.paymentStatus === 'paid' ? priceVal : Number(newPurchaseInput.amountPaid),
       };
 
+      if (newPurchaseInput.paymentStatus === 'emi') {
+        newPurchase.firstEmiDate = newPurchaseInput.firstEmiDate;
+      }
+
       const history = getCustomerPurchases(existingCustomer);
       const updatedHistory = [...history, newPurchase];
 
       const docRef = doc(db, 'customers', existingCustomer.id);
-      await updateDoc(docRef, {
+      const updatePayload: any = {
         productPurchased: newPurchase.productPurchased,
         purchasePrice: newPurchase.purchasePrice,
         purchaseDate: newPurchase.purchaseDate,
@@ -499,7 +605,15 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
         paymentStatus: newPurchase.paymentStatus,
         amountPaid: newPurchase.amountPaid,
         purchaseHistory: updatedHistory,
-      });
+      };
+
+      if (newPurchase.paymentStatus === 'emi') {
+        updatePayload.firstEmiDate = newPurchase.firstEmiDate;
+      } else {
+        updatePayload.firstEmiDate = null;
+      }
+
+      await updateDoc(docRef, updatePayload);
 
       onAddToast(`Added ${newPurchase.productPurchased} purchase to existing customer ${existingCustomer.customerName} successfully!`, 'success');
       setDuplicateCheckData(null);
@@ -825,6 +939,133 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
             {/* User Meta & Dark Mode Toggle */}
             <div className="flex items-center gap-2 sm:gap-4">
+              {/* 3-Day EMI Notifications Popover */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsEmiPopoverOpen(prev => !prev)}
+                  className={`p-2 rounded-xl transition-all border border-transparent cursor-pointer relative ${
+                    isEmiPopoverOpen 
+                      ? 'bg-amber-100/80 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50' 
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 dark:border-slate-800'
+                  }`}
+                  title="Upcoming EMI Alerts (3 Days or Less)"
+                  id="emi-navbar-bell-btn"
+                >
+                  <Bell className={`h-5 w-5 ${emiAlerts.length > 0 ? 'animate-pulse text-amber-600 dark:text-amber-400' : ''}`} />
+                  {emiAlerts.length > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white ring-2 ring-white dark:ring-[#111827]">
+                      {emiAlerts.length}
+                    </span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {isEmiPopoverOpen && (
+                    <>
+                      {/* Invisible backdrop to close on click-away */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsEmiPopoverOpen(false)}
+                      />
+                      
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="fixed top-18 right-4 left-4 sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:mt-2 w-auto sm:w-96 bg-white dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col"
+                        id="emi-navbar-popover"
+                      >
+                        {/* Popover Header */}
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-[#111827] flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-amber-500 animate-pulse" />
+                            <span className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+                              EMI Due in 3 Days or Less
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400">
+                            {emiAlerts.length} Alerts
+                          </span>
+                        </div>
+
+                        {/* Popover Content List */}
+                        <div className="overflow-y-auto max-h-[350px] p-4 space-y-4 divide-y divide-slate-100 dark:divide-slate-800/60">
+                          {emiAlerts.length === 0 ? (
+                            <div className="py-8 text-center space-y-2">
+                              <Bell className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                No EMI installments due in 3 days or less.
+                              </p>
+                            </div>
+                          ) : (
+                            emiAlerts.map(({ customer, purchase, upcomingDate, daysLeft }, index) => {
+                              const dateString = upcomingDate 
+                                ? upcomingDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) 
+                                : purchase.firstEmiDate;
+                              
+                              const total = purchase.purchasePrice;
+                              const paid = purchase.amountPaid ?? total;
+                              const balance = Math.max(0, total - paid);
+
+                              return (
+                                <div 
+                                  key={purchase.id + '_popover_' + customer.id} 
+                                  className={`space-y-2.5 ${index > 0 ? 'pt-4' : ''}`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate max-w-[150px]">
+                                      {customer.customerName}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider border ${
+                                      daysLeft === 0
+                                        ? 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-900/30 animate-pulse'
+                                        : daysLeft === 1
+                                        ? 'bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400 border-orange-100 dark:border-orange-900/30'
+                                        : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/30'
+                                    }`}>
+                                      {daysLeft === 0 ? 'Due Today ⚠️' : daysLeft === 1 ? 'Due Tomorrow' : `In ${daysLeft} Days`}
+                                    </span>
+                                  </div>
+
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1 bg-slate-50/50 dark:bg-slate-900/30 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                                    <p className="flex justify-between">
+                                      <span className="text-slate-400 dark:text-slate-500">Product:</span>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">{purchase.productPurchased}</span>
+                                    </p>
+                                    <p className="flex justify-between">
+                                      <span className="text-slate-400 dark:text-slate-500">Remaining Balance:</span>
+                                      <span className="font-extrabold text-slate-800 dark:text-slate-200">₹{balance.toLocaleString('en-IN')}</span>
+                                    </p>
+                                    <p className="flex justify-between">
+                                      <span className="text-slate-400 dark:text-slate-500">EMI Date:</span>
+                                      <span className="font-bold text-indigo-600 dark:text-indigo-400">{dateString}</span>
+                                    </p>
+                                  </div>
+
+                                  <button
+                                    onClick={() => {
+                                      sendEmiReminder(customer, purchase, daysLeft !== null ? daysLeft : 3);
+                                      setIsEmiPopoverOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.965C16.488 2.01 14.041.916 11.998.916 6.556.916 2.13 5.288 2.127 10.717c-.001 1.71.463 3.38 1.341 4.879l-.988 3.606 3.708-.968c1.478.795 3.013 1.22 4.559 1.22zM18.224 15c-.3-.15-1.782-.88-2.062-.982-.28-.102-.485-.153-.69.154-.204.307-.79.983-.97 1.187-.18.204-.359.228-.659.078-1.517-.76-2.613-1.39-3.663-2.193-.834-.64-.816-.546-.222-1.25.153-.182.3-.359.45-.516.15-.157.2-.27.3-.45.1-.18.05-.337-.025-.487-.075-.15-.69-1.66-.945-2.272-.249-.597-.502-.516-.69-.526-.18-.01-.387-.01-.594-.01-.206 0-.543.078-.826.388-.283.31-1.08 1.057-1.08 2.578 0 1.52 1.107 2.99 1.26 3.2.154.209 2.181 3.33 5.286 4.67.738.318 1.314.508 1.764.65.744.237 1.422.203 1.956.124.596-.089 1.782-.728 2.032-1.43.25-.701.25-1.3.174-1.43-.075-.13-.274-.207-.574-.357z" />
+                                    </svg>
+                                    Send WhatsApp Reminder
+                                  </button>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {/* Dark Mode Toggle Button */}
               <button
                 onClick={() => setIsDarkMode(prev => !prev)}
@@ -1331,13 +1572,20 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                         <span className="text-[10px] text-amber-600 font-bold">Due: {formatCurrency(due)}</span>
                                       </div>
                                     ) : (
-                                      <div className="flex items-center gap-2">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                                          EMI
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 font-medium font-mono">
-                                          DP: {formatCurrency(paid)}/{formatCurrency(total)}
-                                        </span>
+                                      <div className="flex flex-col justify-center">
+                                        <div className="flex items-center gap-2">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                                            EMI
+                                          </span>
+                                          <span className="text-[10px] text-slate-500 font-medium font-mono">
+                                            DP: {formatCurrency(paid)}/{formatCurrency(total)}
+                                          </span>
+                                        </div>
+                                        {purchase.firstEmiDate && (
+                                          <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
+                                            First EMI: {purchase.firstEmiDate}
+                                          </span>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -1494,9 +1742,16 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
                                     Due: {formatCurrency(dueMob)}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 font-mono dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/45">
-                                    EMI DP: {formatCurrency(paidMob)}
-                                  </span>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 font-mono dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/45">
+                                      EMI DP: {formatCurrency(paidMob)}
+                                    </span>
+                                    {purchase.firstEmiDate && (
+                                      <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                                        1st EMI: {purchase.firstEmiDate}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>

@@ -21,6 +21,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
     warrantyMonths: '12',
     paymentStatus: 'paid',
     amountPaid: '',
+    firstEmiDate: '',
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
@@ -28,6 +29,10 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
 
   // Load customer data when editing
   useEffect(() => {
+    const defaultEmiDate = new Date();
+    defaultEmiDate.setDate(defaultEmiDate.getDate() + 30);
+    const defaultEmiStr = defaultEmiDate.toISOString().split('T')[0];
+
     if (customer) {
       // Convert Firestore Timestamp to YYYY-MM-DD string
       let dateStr = '';
@@ -48,6 +53,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
         warrantyMonths: (customer.warrantyMonths ?? 12).toString(),
         paymentStatus: customer.paymentStatus ?? 'paid',
         amountPaid: (customer.amountPaid ?? customer.purchasePrice).toString(),
+        firstEmiDate: customer.firstEmiDate ?? defaultEmiStr,
       });
     } else {
       // Reset form when adding
@@ -61,6 +67,7 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
         warrantyMonths: '12',
         paymentStatus: 'paid',
         amountPaid: '',
+        firstEmiDate: defaultEmiStr,
       });
     }
     setErrors({});
@@ -106,6 +113,10 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
         newErrors.amountPaid = `${fieldLabel} must be a valid positive number`;
       } else if (Number(amtPaid) > Number(formData.purchasePrice)) {
         newErrors.amountPaid = `${fieldLabel} cannot exceed purchase price`;
+      }
+
+      if (formData.paymentStatus === 'emi' && !formData.firstEmiDate) {
+        newErrors.firstEmiDate = 'First EMI installment date is required';
       }
     }
 
@@ -394,29 +405,57 @@ export default function CustomerModal({ isOpen, onClose, onSave, customer }: Cus
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
+                      className="overflow-hidden space-y-4"
                     >
-                      <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-                        {formData.paymentStatus === 'emi' ? 'Downpayment (DP) Amount (₹)' : 'Amount Paid so far (₹)'} <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative rounded-xl shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                      <div>
+                        <label htmlFor="amountPaid" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                          {formData.paymentStatus === 'emi' ? 'Downpayment (DP) Amount (₹)' : 'Amount Paid so far (₹)'} <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative rounded-xl shadow-sm">
+                          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <DollarSign className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                          </div>
+                          <input
+                            type="text"
+                            name="amountPaid"
+                            id="amountPaid"
+                            value={formData.amountPaid}
+                            onChange={handleChange}
+                            placeholder={formData.paymentStatus === 'emi' ? 'e.g. 5000 (Downpayment)' : 'e.g. 10000'}
+                            className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                              errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
+                            }`}
+                          />
                         </div>
-                        <input
-                          type="text"
-                          name="amountPaid"
-                          id="amountPaid"
-                          value={formData.amountPaid}
-                          onChange={handleChange}
-                          placeholder={formData.paymentStatus === 'emi' ? 'e.g. 5000 (Downpayment)' : 'e.g. 10000'}
-                          className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
-                            errors.amountPaid ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
-                          }`}
-                        />
+                        {errors.amountPaid && (
+                          <p className="text-xs text-red-500 mt-1" id="error-amountPaid">{errors.amountPaid}</p>
+                        )}
                       </div>
-                      {errors.amountPaid && (
-                        <p className="text-xs text-red-500 mt-1" id="error-amountPaid">{errors.amountPaid}</p>
+
+                      {formData.paymentStatus === 'emi' && (
+                        <div>
+                          <label htmlFor="firstEmiDate" className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
+                            First EMI Installment Date <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative rounded-xl shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                              <Calendar className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+                            </div>
+                            <input
+                              type="date"
+                              name="firstEmiDate"
+                              id="firstEmiDate"
+                              value={formData.firstEmiDate}
+                              onChange={handleChange}
+                              className={`block w-full pl-10 pr-4 py-3 rounded-xl border text-slate-900 dark:text-white bg-white dark:bg-[#1f2937] placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm ${
+                                errors.firstEmiDate ? 'border-red-300 ring-2 ring-red-500/10' : 'border-slate-200 dark:border-slate-700'
+                              }`}
+                            />
+                          </div>
+                          {errors.firstEmiDate && (
+                            <p className="text-xs text-red-500 mt-1" id="error-firstEmiDate">{errors.firstEmiDate}</p>
+                          )}
+                        </div>
                       )}
                     </motion.div>
                   )}

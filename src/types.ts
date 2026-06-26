@@ -6,6 +6,7 @@ export interface Purchase {
   warrantyMonths?: number;
   paymentStatus?: 'paid' | 'pending' | 'emi';
   amountPaid?: number;
+  firstEmiDate?: string; // "YYYY-MM-DD"
 }
 
 export interface Customer {
@@ -21,6 +22,7 @@ export interface Customer {
   paymentStatus?: 'paid' | 'pending' | 'emi'; // Payment status
   amountPaid?: number; // Amount paid so far
   purchaseHistory?: Purchase[];
+  firstEmiDate?: string; // "YYYY-MM-DD"
 }
 
 export interface CustomerInput {
@@ -33,6 +35,7 @@ export interface CustomerInput {
   warrantyMonths: string; // "12"
   paymentStatus: 'paid' | 'pending' | 'emi';
   amountPaid: string;
+  firstEmiDate: string; // "YYYY-MM-DD"
 }
 
 export enum OperationType {
