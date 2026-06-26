@@ -36,7 +36,8 @@ import {
   WifiOff,
   Wifi,
   Bell,
-  Megaphone
+  Megaphone,
+  ArrowUpDown
 } from 'lucide-react';
 import {
   collection,
@@ -79,6 +80,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   const [filterMaxPrice, setFilterMaxPrice] = useState('');
   const [filterWarranty, setFilterWarranty] = useState<string>('all');
   const [filterPayment, setFilterPayment] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'purchaseDateDesc' | 'purchaseDateAsc' | 'nameAsc' | 'createdAtDesc'>('purchaseDateDesc');
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -226,6 +228,34 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       firstEmiDate: customer.firstEmiDate,
       lastEmiReminderSentDate: customer.lastEmiReminderSentDate,
     }];
+  };
+
+  // Helper to parse purchaseDate to milliseconds timestamp for sorting
+  const getLatestPurchaseTimestamp = (customer: Customer): number => {
+    const purchases = getCustomerPurchases(customer);
+    if (purchases.length === 0) {
+      if (customer.createdAt) {
+        const createdDate = customer.createdAt.toDate ? customer.createdAt.toDate() : new Date(customer.createdAt);
+        return createdDate.getTime();
+      }
+      return 0;
+    }
+
+    const dates = purchases.map(p => {
+      if (!p.purchaseDate) return 0;
+      const date = p.purchaseDate.toDate ? p.purchaseDate.toDate() : new Date(p.purchaseDate);
+      return isNaN(date.getTime()) ? 0 : date.getTime();
+    });
+
+    const maxTimestamp = Math.max(...dates);
+    if (maxTimestamp > 0) return maxTimestamp;
+
+    // Fallback to createdAt if no valid purchase date
+    if (customer.createdAt) {
+      const createdDate = customer.createdAt.toDate ? customer.createdAt.toDate() : new Date(customer.createdAt);
+      return createdDate.getTime();
+    }
+    return 0;
   };
 
   // Helper to calculate upcoming EMI details
@@ -479,7 +509,7 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
   // Real-time compound filtering and search logic
   const filteredCustomers = useMemo(() => {
-    return customers.filter(customer => {
+    const filtered = customers.filter(customer => {
       const purchases = getCustomerPurchases(customer);
 
       // 1. Search filter
@@ -537,12 +567,31 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
 
       return matchesSearch && matchesAddress && matchesProduct && matchesDate && matchesPrice && matchesWarranty && matchesPayment;
     });
-  }, [customers, searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment]);
 
-  // Reset pagination when filters change
+    // Apply sorting
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'purchaseDateDesc') {
+        return getLatestPurchaseTimestamp(b) - getLatestPurchaseTimestamp(a);
+      }
+      if (sortBy === 'purchaseDateAsc') {
+        return getLatestPurchaseTimestamp(a) - getLatestPurchaseTimestamp(b);
+      }
+      if (sortBy === 'nameAsc') {
+        return a.customerName.localeCompare(b.customerName);
+      }
+      if (sortBy === 'createdAtDesc') {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
+      }
+      return 0;
+    });
+  }, [customers, searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment, sortBy]);
+
+  // Reset pagination when filters or sorting changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment]);
+  }, [searchTerm, filterAddress, filterProduct, filterDate, filterMinPrice, filterMaxPrice, filterWarranty, filterPayment, sortBy]);
 
   // Pagination bounds
   const totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1;
@@ -1333,11 +1382,30 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
               )}
             </div>
 
-            {/* Filter Toggle Button */}
-            <div className="flex items-center gap-2">
+            {/* Filter Toggle & Sorting */}
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              {/* Sort Selector */}
+              <div className="relative flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all w-full sm:w-auto">
+                <ArrowUpDown className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0" />
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer pr-1 w-full sm:w-auto py-0.5"
+                  id="customer-sort-select"
+                  aria-label="Sort customers list"
+                >
+                  <option value="purchaseDateDesc" className="bg-white dark:bg-[#111827]">Latest Purchase (Newest)</option>
+                  <option value="purchaseDateAsc" className="bg-white dark:bg-[#111827]">Oldest Purchase (Oldest)</option>
+                  <option value="createdAtDesc" className="bg-white dark:bg-[#111827]">Date Registered (Newest)</option>
+                  <option value="nameAsc" className="bg-white dark:bg-[#111827]">Customer Name (A-Z)</option>
+                </select>
+              </div>
+
+              {/* Filter Toggle Button */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all w-full md:w-auto ${
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all flex-1 sm:flex-initial md:w-auto ${
                   showFilters || filterAddress || filterProduct || filterDate || filterMinPrice || filterMaxPrice || filterWarranty !== 'all' || filterPayment !== 'all'
                     ? 'border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400'
                     : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
