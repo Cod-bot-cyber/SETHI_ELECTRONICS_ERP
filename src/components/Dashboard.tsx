@@ -92,6 +92,9 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
   // EMI scheduled 3-days prior notifications popover toggle state
   const [isEmiPopoverOpen, setIsEmiPopoverOpen] = useState(false);
 
+  // Track sent EMI reminder unique keys (customerId_purchaseId) to filter them out of active notifications
+  const [sentEmiReminderIds, setSentEmiReminderIds] = useState<Set<string>>(new Set());
+
   // Entry Gateway lock states
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [authStatus, setAuthStatus] = useState<'idle' | 'authenticating' | 'success'>('idle');
@@ -262,9 +265,12 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
           upcomingDate,
           daysLeft
         };
-      }).filter(alert => alert.daysLeft !== null && alert.daysLeft <= 3 && alert.daysLeft >= 0);
+      }).filter(alert => {
+        const key = `${alert.customer.id}_${alert.purchase.id}`;
+        return !sentEmiReminderIds.has(key) && alert.daysLeft !== null && alert.daysLeft <= 3 && alert.daysLeft >= 0;
+      });
     });
-  }, [customers]);
+  }, [customers, sentEmiReminderIds]);
 
   // Handle sending EMI reminder via WhatsApp
   const sendEmiReminder = (customer: Customer, purchase: Purchase, daysLeft: number) => {
@@ -276,20 +282,19 @@ export default function Dashboard({ user, onAddToast }: DashboardProps) {
       dateStr = purchase.firstEmiDate;
     }
     
-    const totalAmount = purchase.purchasePrice;
-    const paidAmount = purchase.amountPaid ?? totalAmount;
-    const dueAmount = Math.max(0, totalAmount - paidAmount);
-    
-    const amountStr = dueAmount > 0 
-      ? `remaining balance of ₹${dueAmount.toLocaleString('en-IN')}`
-      : 'EMI installment';
-
-    const rawMsg = `Hello ${customer.customerName},\n\nThis is a friendly reminder from Sethi Electronics that your upcoming ${amountStr} for your ${purchase.productPurchased} purchase is due in ${daysLeft} days on ${dateStr}.\n\nPlease ensure the payment is made on or before the due date. Thank you!`;
+    const rawMsg = `GREETING FROM SETHI ELECTRONICS !\nYour ${purchase.productPurchased} EMI is scheduled after ${daysLeft} days on ${dateStr}.`;
     
     const cleanPhone = customer.phoneNumber.replace(/\D/g, '');
     const phoneWithCode = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const url = `https://wa.me/${phoneWithCode}?text=${encodeURIComponent(rawMsg)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+
+    // Mark as sent so it disappears from the active alerts popover/bell icon
+    setSentEmiReminderIds(prev => {
+      const next = new Set(prev);
+      next.add(`${customer.id}_${purchase.id}`);
+      return next;
+    });
   };
 
   // Trigger toast alert once on load if any customer EMI is 3 days or less away
